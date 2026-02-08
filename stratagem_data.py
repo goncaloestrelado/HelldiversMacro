@@ -12,9 +12,9 @@ STRATAGEMS = {
     "Heavy Machine Gun": ["down", "left", "up", "down", "down"],
     "Airburst Rocket Launcher": ["down", "up", "up", "left", "right"],
     "Commando": ["down", "left", "up", "down", "right"],
-    "Railgun": ["down", "right", "down", "up", "left", "right"],
+    "Railgun": ["down", "right", "left", "down", "up", "left", "right"],
     "Spear": ["down", "down", "up", "down", "down"],
-    "StA-X3 W.A.S.P. Launcher": ["down", "down", "up", "down", "right"],
+    "Sterilizer": ["down", "left", "up", "down", "left"],
 
     # --- Orbital Cannons ---
     "Orbital Gatling Barrage": ["right", "down", "left", "up", "up"],
@@ -23,9 +23,8 @@ STRATAGEMS = {
     "Orbital 380MM HE Barrage": ["right", "down", "up", "up", "left", "down", "down"],
     "Orbital Walking Barrage": ["right", "down", "right", "down", "right", "down"],
     "Orbital Laser": ["right", "down", "up", "right", "down"],
-    "Orbital Napalm Barrage": ["right", "right", "down", "left", "right", "up"],
     "Orbital Railcannon Strike": ["right", "up", "down", "down", "right"],
-    "Orbital Illumination Flare": ["right", "right", "left", "left"],
+    "Orbital Napalm Barrage": ["right", "right", "down", "left", "up", "up"],
 
     # --- Hangar ---
     "Eagle Strafing Run": ["up", "right", "right"],
@@ -46,11 +45,10 @@ STRATAGEMS = {
     "HMG Emplacement": ["down", "up", "left", "right", "right", "left"],
     "Shield Generator Relay": ["down", "down", "left", "right", "left", "right"],
     "Tesla Tower": ["down", "up", "right", "up", "left", "right"],
-    "Grenadier Battlement": ["down", "right", "down", "left", "right"],
 
     # --- Engineering Bay ---
     "Anti-Personnel Minefield": ["down", "left", "up", "right"],
-    "Supply Pack": ["down", "left", "down", "up", "up", "right"],
+    "Supply Pack": ["down", "left", "down", "up", "up", "down"],
     "Grenade Launcher": ["down", "left", "up", "left", "down"],
     "Laser Cannon": ["down", "left", "down", "up", "left"],
     "Incendiary Mines": ["down", "left", "left", "down"],
@@ -60,7 +58,7 @@ STRATAGEMS = {
     "Quasar Cannon": ["down", "down", "up", "left", "right"],
     "Shield Generator Pack": ["down", "up", "left", "right", "left", "right"],
     "Anti-Tank Mines": ["down", "left", "up", "up"],
-    "Gas Mine": ["down", "left", "left", "right"],
+    "Gas Mines": ["down", "left", "left", "down"],
 
     # --- Robotics Workshop ---
     "Machine Gun Sentry": ["down", "up", "right", "right", "up"],
@@ -72,42 +70,17 @@ STRATAGEMS = {
     "EMS Mortar Sentry": ["down", "up", "right", "down", "right"],
     "Patriot Exosuit": ["left", "down", "right", "up", "left", "down", "down"],
     "Emancipator Exosuit": ["left", "down", "right", "up", "left", "down", "up"],
+    "Guard Dog Dog Breath": ["down", "up", "left", "up", "right", "up"],
 
-    # --- Vehicles & Heavy ---
-    "Fast Recon Vehicle": ["left", "down", "right", "down", "right", "down", "up"],
-    "Bastion MK XVI": ["left", "down", "right", "down", "left", "down", "up", "down", "up"],
-    "Solo Silo": ["down", "up", "right", "down", "down"],
-    "Maxigun": ["down", "left", "right", "down", "up", "up"],
-
-    # --- Misc / Mission Specific ---
+    # --- Mission Specific ---
     "Reinforce": ["up", "down", "right", "left", "up"],
     "SOS Beacon": ["up", "down", "right", "up"],
     "Resupply": ["down", "down", "up", "right"],
     "Hellbomb": ["down", "up", "left", "down", "up", "right", "down", "up"],
-    "Upload Data": ["down", "down", "left", "right", "down"],
+    "Upload Data": ["left", "right", "up", "up", "up"],
     "Seismic Probe": ["up", "up", "left", "right", "down", "down"],
-    "Hive Breaker Drill": ["left", "up", "down", "right", "down", "down"],
-    "Cargo Container": ["up", "up", "down", "down", "right", "down"],
+    "SSSD Delivery": ["down", "down", "down", "up", "up"],
     "SEAF Artillery": ["right", "up", "up", "down"],
-    "Call In Super Destroyer": ["up", "up", "down", "down", "left", "right", "left", "right"],
-
-    # --- Warbonds / Special / Community ---
-    "Sterilizer": ["down", "left", "up", "down", "left"],
-    "Guard Dog Breath": ["down", "up", "left", "up", "right", "up"],
-    "Directional Shield": ["down", "up", "left", "right", "up", "up"],
-    "Anti-Tank Emplacement": ["down", "up", "left", "right", "right", "right"],
-    "Flame Sentry": ["down", "up", "right", "down", "up", "up"],
-    "Hellbomb Portable": ["down", "right", "up", "up", "up"],
-    "Hover Pack": ["down", "up", "up", "down", "left", "right"],
-    "One True Flag": ["down", "left", "right", "right", "up"],
-    "GL-52 De-Escalator": ["down", "right", "up", "left", "right"],
-    "Guard Dog K-9": ["down", "up", "left", "up", "right", "left"],
-    "Epoch": ["down", "left", "up", "left", "right"],
-    "Laser Sentry": ["down", "up", "right", "down", "up", "right"],
-    "Warp Pack": ["down", "left", "right", "down", "left", "right"],
-    "Speargun": ["down", "right", "down", "left", "up", "right"],
-    "Expendable Napalm": ["down", "down", "left", "up", "left"],
-    "Defoliation Tool": ["down", "left", "right", "right", "down"],
-    "Guard Dog Hot Dog": ["down", "up", "left", "up", "left", "left"],
-    "C4 Pack": ["down", "right", "up", "up", "right", "up"],
+    "Super Earth Flag": ["down", "up", "down", "up"],
+    "Illumination Flare": ["right", "right", "left", "left"],
 }
