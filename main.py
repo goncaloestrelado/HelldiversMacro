@@ -391,6 +391,11 @@ class NumpadSlot(QWidget):
         self.setStyleSheet(f"QWidget {{ border: 2px {border_style} {color}; background: {bg}; color: #888; border-radius: 8px; font-weight: bold; }} QWidget:hover {{ border: 2px solid {'#ff4444' if assigned else '#ffcc00'}; background: {'#201010' if assigned else '#151515'}; }}")
 
     def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.RightButton:
+            if self.assigned_stratagem:
+                self.clear_slot()
+            return
+
         if event.button() == Qt.MouseButton.LeftButton:
             if self.assigned_stratagem:
                 drag = QDrag(self)
@@ -402,9 +407,7 @@ class NumpadSlot(QWidget):
                 drag.exec(Qt.DropAction.MoveAction)
             
     def mouseDoubleClickEvent(self, event):
-        """Quick clear on double click instead of single click to avoid drag interference."""
-        if self.assigned_stratagem:
-            self.clear_slot()
+        event.ignore()
 
     def dragEnterEvent(self, event):
         event.accept()
