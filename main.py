@@ -2,8 +2,8 @@ import sys, json, keyboard, time, os, winsound
 from PyQt6.QtWidgets import (QApplication, QWidget, QGridLayout, QLabel, 
                              QHBoxLayout, QVBoxLayout, QScrollArea, QLineEdit, 
                              QPushButton, QFileDialog, QMessageBox, QDialog,
-                             QComboBox, QInputDialog, QSlider, QMenuBar, QSpinBox, QMainWindow, QMenu, QListWidget, QStackedWidget, QListWidgetItem, QCheckBox, QSystemTrayIcon)
-from PyQt6.QtCore import Qt, QMimeData, pyqtSignal, QObject, QTimer, QRect
+                             QComboBox, QInputDialog, QSlider, QMenuBar, QSpinBox, QMainWindow, QMenu, QListWidget, QStackedWidget, QListWidgetItem, QCheckBox, QSystemTrayIcon, QToolButton, QStyle)
+from PyQt6.QtCore import Qt, QMimeData, pyqtSignal, QObject, QTimer, QRect, QEvent
 from PyQt6.QtSvgWidgets import QSvgWidget
 from PyQt6.QtGui import QDrag, QFont, QPixmap, QAction, QIcon
 from stratagem_data import STRATAGEMS
@@ -590,6 +590,17 @@ class StratagemApp(QMainWindow):
         self.search.setObjectName("search_input")
         self.search.setPlaceholderText("Search...")
         self.search.textChanged.connect(self.filter_icons)
+        self.search_clear_btn = QToolButton(self.search)
+        self.search_clear_btn.setObjectName("search_clear_btn")
+        self.search_clear_btn.setText("x")
+        self.search_clear_btn.setFixedSize(16, 16)
+        self.search_clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.search_clear_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.search_clear_btn.clicked.connect(self.search.clear)
+        self.search_clear_btn.hide()
+        self.search.textChanged.connect(self.update_search_clear_visibility)
+        self.search.installEventFilter(self)
+        self.update_search_clear_visibility(self.search.text())
         side.addWidget(self.search)
 
         self.scroll = QScrollArea()
@@ -626,6 +637,30 @@ class StratagemApp(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.position_status_label()
+        self.update_search_clear_position()
+
+    def eventFilter(self, source, event):
+        if source == self.search and event.type() == QEvent.Type.Resize:
+            self.update_search_clear_position()
+        return super().eventFilter(source, event)
+
+    def update_search_clear_visibility(self, text):
+        if not hasattr(self, "search_clear_btn"):
+            return
+        has_text = bool(text)
+        self.search_clear_btn.setVisible(has_text)
+        self.update_search_clear_position()
+
+    def update_search_clear_position(self):
+        if not hasattr(self, "search_clear_btn"):
+            return
+        frame_width = self.search.style().pixelMetric(QStyle.PixelMetric.PM_DefaultFrameWidth)
+        btn_size = self.search_clear_btn.sizeHint()
+        right_padding = btn_size.width() + 10
+        self.search.setTextMargins(8, 0, right_padding, 0)
+        x = self.search.rect().right() - frame_width - btn_size.width() - 4
+        y = (self.search.rect().height() - btn_size.height()) // 2
+        self.search_clear_btn.move(x, y)
 
     def position_status_label(self):
         label_width = 300
