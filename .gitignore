@@ -57,3 +57,7 @@ env/
 
 # Logs
 *.log
+
+# App-generated data
+general.json
+profiles/*.json
