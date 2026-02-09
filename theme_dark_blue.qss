@@ -16,15 +16,16 @@ QWidget[role="icon"]:hover { background: #252525; border: 1px solid #00ccff; }
 QComboBox#profile_box { background: #111; border: 1px solid #444; padding: 5px; color: #00ccff; font-weight: bold; }
 
 /* Profile select styled like menu button */
-QComboBox#profile_box_styled { background: #1a1a1a; border: 1px solid #333; border-radius: 4px; color: #00ccff; font-weight: bold; padding: 4px 8px; min-width: 140px; min-height: 30px; max-width: 140px; max-height: 30px; }
+QComboBox#profile_box_styled { background: #1a1a1a; border: 1px solid #333; border-radius: 4px; color: #00ccff; font-weight: bold; padding: 2px 8px; min-width: 178px; min-height: 26px; max-width: 178px; max-height: 26px; margin: 0px; }
 QComboBox#profile_box_styled:hover { background: #252525; border: 1px solid #00ccff; }
+QComboBox#profile_box_styled::drop-down { subcontrol-origin: border; subcontrol-position: center right; width: 22px; height: 26px; }
 
 /* Menu button */
-QPushButton#menu_button { background: #1a1a1a; border: 1px solid #333; border-radius: 4px; color: #00ccff; font-weight: bold; padding: 4px 8px; }
+QPushButton#menu_button { background: #1a1a1a; border: 1px solid #333; border-radius: 4px; color: #00ccff; font-weight: bold; padding: 4px 8px; margin: 0px; }
 QPushButton#menu_button:hover { background: #252525; border: 1px solid #00ccff; }
 
 /* Latency button */
-QPushButton#speed_btn { font-size: 8pt; color: #888; background: transparent; border: none; text-align: left; }
+QPushButton#speed_btn { font-size: 8pt; color: #888; background: transparent; border: none; text-align: left; margin: 0px; }
 QPushButton#speed_btn:hover { color: #00ccff; }
 
 /* Action buttons (Save, Test, Clear) */
@@ -44,20 +45,26 @@ QLabel#test_arrow { color: white; font-size: 35pt; letter-spacing: 12px; border:
 /* Settings Dialog */
 QDialog#settings_dialog { background: #070707; color: #00ccff; border: 1px solid #333; min-width: 360px; min-height: 140px; }
 QLabel#settings_label { color: #ddd; font-weight: bold; }
+QLabel#settings_description { color: #aaa; font-size: 11px; margin-top: 10px; }
+QLabel#settings_sub_label { color: #ddd; padding-top: 8px; }
+QCheckBox[role="settings_check"] { color: #ddd; padding: 8px; }
+QComboBox#settings_theme_combo { background: #1a1a1a; color: #ddd; border: 1px solid #333; padding: 4px; }
 QPushButton#settings_apply { background: #222; color: #00ccff; border: 1px solid #444; padding: 6px 12px; }
 QPushButton#settings_cancel { background: #222; color: #ddd; border: 1px solid #444; padding: 6px 12px; }
 
 /* Settings Window */
 QDialog#settings_window { background: #070707; color: #00ccff; }
-QListWidget#settings_tab_list { background: #0a0a0a; color: #00ccff; border: none; padding: 0px; }
+QListWidget#settings_tab_list { background: #0a0a0a; color: #00ccff; border: none; border-right: 1px solid #333; padding: 0px; }
 QListWidget#settings_tab_list::item { padding: 8px; border: none; }
 QListWidget#settings_tab_list::item:selected { background: #151515; border-left: 3px solid #00ccff; }
 QStackedWidget#settings_content { background: #070707; }
 
 /* Numpad slots */
 QWidget[role="numpad-slot"] { border-radius: 8px; color: #888; font-weight: bold; min-width: 90px; min-height: 90px; max-width: 90px; max-height: 90px; }
-QWidget[role="numpad-slot-empty"] { border: 2px dashed #444; background: #0a0a0a; }
-QWidget[role="numpad-slot-assigned"] { border: 2px solid #00ccff; background: #151515; }
+QWidget[role="numpad-slot"][assigned="false"] { border: 2px dashed #444; background: #0a0a0a; }
+QWidget[role="numpad-slot"][assigned="false"]:hover { border: 2px solid #ffcc00; background: #151515; }
+QWidget[role="numpad-slot"][assigned="true"] { border: 2px solid #ffcc00; background: #151515; }
+QWidget[role="numpad-slot"][assigned="true"]:hover { border: 2px solid #ff4444; background: #201010; }
 
 /* Widget sizes */
 QWidget#main_window { min-width: 550px; min-height: 500px; }
@@ -65,3 +72,4 @@ QSlider#settings_slider { min-width: 220px; max-width: 220px; }
 QScrollArea#icon_scroll { min-width: 110px; max-width: 110px; }
 QSlider#speed_slider { min-width: 120px; max-width: 120px; }
 QMenuBar { min-height: 22px; max-height: 22px; }
+QPushButton#undo_button:disabled { color: #555; border: 1px solid #333; }

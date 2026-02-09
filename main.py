@@ -520,6 +520,7 @@ class StratagemApp(QMainWindow):
         
         # Left sidebar: Settings and Latency (vertical)
         left_sidebar = QVBoxLayout()
+        left_sidebar.setContentsMargins(8, 8, 0, 8)
         
         # Settings button
         settings_btn = QPushButton("⚙ Settings")
@@ -550,6 +551,7 @@ class StratagemApp(QMainWindow):
 
         # Right sidebar: Profile Select and Action Buttons (vertical)
         right_sidebar = QVBoxLayout()
+        right_sidebar.setContentsMargins(0, 8, 8, 8)
         
         # Profile select
         self.profile_box = QComboBox()
@@ -559,6 +561,7 @@ class StratagemApp(QMainWindow):
         
         # Action buttons
         btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(6)
         self.undo_btn = QPushButton("↶")  # Undo button
         btn_save, btn_test, btn_clear = QPushButton("💾"), QPushButton("🧪"), QPushButton("🗑️")
         for btn, tip in zip([self.undo_btn, btn_save, btn_test, btn_clear], ["Undo Changes", "Save Profile", "Test Mode", "Clear"]):
