@@ -564,6 +564,7 @@ class StratagemApp(QMainWindow):
         btn_layout.setSpacing(6)
         self.undo_btn = QPushButton("↶")  # Undo button
         btn_save, btn_test, btn_clear = QPushButton("💾"), QPushButton("🧪"), QPushButton("🗑️")
+        self.save_btn = btn_save
         for btn, tip in zip([self.undo_btn, btn_save, btn_test, btn_clear], ["Undo Changes", "Save Profile", "Test Mode", "Clear"]):
             btn.setToolTip(tip)
             btn.setProperty("role", "action")
@@ -888,6 +889,11 @@ class StratagemApp(QMainWindow):
                 self.undo_btn.setStyleSheet("color: #fff; opacity: 1.0;")
             else:
                 self.undo_btn.setStyleSheet("color: #555; opacity: 0.5; border: 1px solid #333;")
+            if hasattr(self, "save_btn") and self.save_btn:
+                border_color = "#ff4444" if has_changes else "#3ddc84"
+                self.save_btn.setStyleSheet(
+                    f"QPushButton {{ border: 2px solid {border_color}; border-radius: 6px; }}"
+                )
 
     def on_change(self):
         """Called when any change is made"""
