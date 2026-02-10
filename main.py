@@ -30,9 +30,26 @@ def normalize(name):
     return name.lower().replace(" ", "").replace("_", "").replace("-", "")
 
 def find_svg_path(name):
+    alias_map = {
+        normalize("Breaching Hammer"): normalize("CQC-20"),
+        normalize("De-Escalator"): normalize("GL-52 De-Escalator"),
+        normalize("EAT-411 Leveller"): normalize("EAT-411"),
+        normalize("GL-28 Belt-Fed Grenade Launcher"): normalize("GL-28"),
+        normalize("Gas Mines"): normalize("Gas Mine"),
+        normalize("Guard Dog Dog Breath"): normalize("Guard Dog Breath"),
+        normalize("Illumination Flare"): normalize("Orbital Illumination Flare"),
+        normalize("M-1000 Maxigun"): normalize("Maxigun"),
+        normalize("M-102 Fast Recon Vehicle"): normalize("Fast Recon Vehicle"),
+        normalize("MS-11 Solo Silo"): normalize("Solo Silo"),
+        normalize("PLAS-45 Epoch"): normalize("Epoch"),
+        normalize("Portable Hellbomb"): normalize("Hellbomb Portable"),
+        normalize("S-11 Speargun"): normalize("Speargun"),
+        normalize("TD-220 Bastion"): normalize("Bastion MK XVI"),
+    }
     base_path = getattr(sys, '_MEIPASS', os.path.abspath("."))
     assets_lookup = os.path.join(base_path, ASSETS_DIR)
     target = normalize(name)
+    target = alias_map.get(target, target)
     for root, dirs, files in os.walk(assets_lookup):
         for f in files:
             if f.endswith(".svg"):

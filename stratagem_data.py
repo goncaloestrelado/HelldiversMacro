@@ -14,6 +14,7 @@ STRATAGEMS = {
     "Commando": ["down", "left", "up", "down", "right"],
     "Railgun": ["down", "right", "left", "down", "up", "left", "right"],
     "Spear": ["down", "down", "up", "down", "down"],
+    "StA-X3 W.A.S.P. Launcher": ["down", "down", "up", "down", "right"],
     "Sterilizer": ["down", "left", "up", "down", "left"],
 
     # --- Orbital Cannons ---
@@ -35,6 +36,8 @@ STRATAGEMS = {
     "Eagle Smoke Strike": ["up", "right", "up", "down"],
     "Eagle 110MM Rocket Pods": ["up", "right", "up", "left"],
     "Eagle 500KG Bomb": ["up", "right", "down", "down", "down"],
+    "M-102 Fast Recon Vehicle": ["left", "down", "right", "down", "right", "down", "up"],
+    "TD-220 Bastion": ["left", "down", "right", "down", "left", "down", "up", "down", "up"],
     "Eagle Rearm": ["up", "up", "left", "up", "right"],
 
     # --- Bridge ---
@@ -43,8 +46,10 @@ STRATAGEMS = {
     "Orbital EMS Strike": ["right", "right", "left", "down"],
     "Orbital Smoke Strike": ["right", "right", "down", "up"],
     "HMG Emplacement": ["down", "up", "left", "right", "right", "left"],
+    "Anti-Tank Emplacement": ["down", "up", "left", "right", "right", "right"],
     "Shield Generator Relay": ["down", "down", "left", "right", "left", "right"],
     "Tesla Tower": ["down", "up", "right", "up", "left", "right"],
+    "Grenadier Battlement": ["down", "right", "down", "left", "right"],
 
     # --- Engineering Bay ---
     "Anti-Personnel Minefield": ["down", "left", "up", "right"],
@@ -68,9 +73,31 @@ STRATAGEMS = {
     "Autocannon Sentry": ["down", "up", "right", "up", "left", "up"],
     "Rocket Sentry": ["down", "up", "right", "right", "left"],
     "EMS Mortar Sentry": ["down", "up", "right", "down", "right"],
+    "Flame Sentry": ["down", "up", "right", "down", "up", "up"],
+    "Laser Sentry": ["down", "up", "right", "down", "up", "right"],
     "Patriot Exosuit": ["left", "down", "right", "up", "left", "down", "down"],
     "Emancipator Exosuit": ["left", "down", "right", "up", "left", "down", "up"],
     "Guard Dog Dog Breath": ["down", "up", "left", "up", "right", "up"],
+
+    # --- Warbonds ---
+    "Directional Shield": ["down", "up", "left", "right", "up", "up"],
+    "Portable Hellbomb": ["down", "right", "up", "up", "up"],
+    "Hover Pack": ["down", "up", "up", "down", "left", "right"],
+    "One True Flag": ["down", "left", "right", "right", "up"],
+    "De-Escalator": ["down", "right", "up", "left", "right"],
+    "Guard Dog K-9": ["down", "up", "left", "up", "right", "left"],
+    "PLAS-45 Epoch": ["down", "left", "up", "left", "right"],
+    "Warp Pack": ["down", "left", "right", "down", "left", "right"],
+    "S-11 Speargun": ["down", "right", "down", "left", "up", "right"],
+    "Expendable Napalm": ["down", "down", "left", "up", "left"],
+    "MS-11 Solo Silo": ["down", "up", "right", "down", "down"],
+    "M-1000 Maxigun": ["down", "left", "right", "down", "up", "up"],
+    "Defoliation Tool": ["down", "left", "right", "right", "down"],
+    "Guard Dog Hot Dog": ["down", "up", "left", "up", "left", "left"],
+    "C4 Pack": ["down", "right", "up", "up", "right", "up"],
+    "Breaching Hammer": ["down", "left", "right", "left", "up"],
+    "EAT-411 Leveller": ["down", "down", "left", "up", "down"],
+    "GL-28 Belt-Fed Grenade Launcher": ["down", "left", "up", "left", "up", "up"],
 
     # --- Mission Specific ---
     "Reinforce": ["up", "down", "right", "left", "up"],
@@ -83,4 +110,10 @@ STRATAGEMS = {
     "SEAF Artillery": ["right", "up", "up", "down"],
     "Super Earth Flag": ["down", "up", "down", "up"],
     "Illumination Flare": ["right", "right", "left", "left"],
+    "Prospecting Drill": ["down", "down", "left", "right", "down", "down"],
+    "Dark Fluid Vessel": ["up", "left", "right", "down", "up", "up"],
+    "Tectonic Drill": ["up", "down", "up", "down", "up", "down"],
+    "Hive Breaker Drill": ["left", "up", "down", "right", "down", "down"],
+    "Cargo Container": ["up", "up", "down", "down", "right", "down"],
+    "Call In Super Destroyer": ["up", "up", "down", "down", "left", "right", "left", "right"],
 }
