@@ -47,7 +47,7 @@ QPushButton[role="action"] { background: #222; border: 1px solid #444; border-ra
 QPushButton[role="action"]:hover { border: 1px solid #ffcc00; }
 
 /* Search input */
-QLineEdit#search_input { padding: 8px 28px 8px 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #ffcc00; }
+QLineEdit#search_input { padding: 4px 28px 4px 8px; background: #111; border: 1px solid #333; border-radius: 6px; color: #ffcc00; height: 32px; line-height: 32px; }
 QToolButton#search_clear_btn { background: #151515; border: 1px solid #333; border-radius: 8px; color: #ffcc00; min-width: 16px; min-height: 16px; font-size: 8pt; font-weight: bold; padding: 0px; text-align: center; }
 QToolButton#search_clear_btn:hover { background: #1f1f1f; border: 1px solid #ffcc00; }
 

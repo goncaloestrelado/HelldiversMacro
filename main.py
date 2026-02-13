@@ -739,7 +739,12 @@ class StratagemApp(QMainWindow):
         self.search = QLineEdit()
         self.search.setObjectName("search_input")
         self.search.setPlaceholderText("Search...")
+        self.search.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.search.setMinimumHeight(32)
+        self.search.setMaximumHeight(32)
+        self.search.setFixedHeight(32)
         self.search.textChanged.connect(self.filter_icons)
+        self.search.textChanged.connect(self.update_search_clear_visibility)
         self.search_clear_btn = QToolButton(self.search)
         self.search_clear_btn.setObjectName("search_clear_btn")
         self.search_clear_btn.setText("x")
@@ -748,7 +753,6 @@ class StratagemApp(QMainWindow):
         self.search_clear_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.search_clear_btn.clicked.connect(self.search.clear)
         self.search_clear_btn.hide()
-        self.search.textChanged.connect(self.update_search_clear_visibility)
         self.search.installEventFilter(self)
         self.update_search_clear_visibility(self.search.text())
         side.addWidget(self.search)
@@ -806,8 +810,8 @@ class StratagemApp(QMainWindow):
     def eventFilter(self, source, event):
         if source == self.search and event.type() == QEvent.Type.Resize:
             self.update_search_clear_position()
-        if hasattr(self, "icon_scroll") and source == self.icon_scroll.viewport() and event.type() == QEvent.Type.Resize:
-            self.update_search_width()
+            if self.search.height() != 32:
+                self.search.setFixedHeight(32)
         return super().eventFilter(source, event)
 
     def update_search_clear_visibility(self, text):
@@ -835,12 +839,12 @@ class StratagemApp(QMainWindow):
         if scroll_width <= 0:
             return
         placeholder_width = self.search.fontMetrics().horizontalAdvance(self.search.placeholderText())
-        min_width = placeholder_width + 28
-        extra_width = 1
-        target_width = max(scroll_width, min_width) + extra_width
+        min_width = placeholder_width + 100
+        target_width = max(scroll_width, min_width)
         if hasattr(self, "side_container"):
             self.side_container.setMinimumWidth(target_width)
         self.search.setFixedWidth(target_width)
+        self.search.setFixedHeight(32)
         self.icon_scroll.setFixedWidth(target_width)
 
     def show_status(self, text, duration=2500):
