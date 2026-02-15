@@ -1,12 +1,14 @@
-import sys, json, keyboard, time, os, winsound, re, ctypes
+import sys, json, keyboard, time, os, winsound, re, ctypes, webbrowser
 from PyQt6.QtWidgets import (QApplication, QWidget, QGridLayout, QLabel, 
                              QHBoxLayout, QVBoxLayout, QScrollArea, QLineEdit, 
                              QPushButton, QFileDialog, QMessageBox, QDialog,
-                             QComboBox, QInputDialog, QSlider, QMenuBar, QSpinBox, QMainWindow, QMenu, QListWidget, QStackedWidget, QListWidgetItem, QCheckBox, QSystemTrayIcon, QToolButton, QStyle, QSizePolicy)
-from PyQt6.QtCore import Qt, QMimeData, pyqtSignal, QObject, QTimer, QRect, QEvent
+                             QComboBox, QInputDialog, QSlider, QMenuBar, QSpinBox, QMainWindow, QMenu, QListWidget, QStackedWidget, QListWidgetItem, QCheckBox, QSystemTrayIcon, QToolButton, QStyle, QSizePolicy, QTextBrowser)
+from PyQt6.QtCore import Qt, QMimeData, pyqtSignal, QObject, QTimer, QRect, QEvent, QThread
 from PyQt6.QtSvgWidgets import QSvgWidget
-from PyQt6.QtGui import QDrag, QFont, QPixmap, QAction, QIcon
+from PyQt6.QtGui import QDrag, QFont, QPixmap, QAction, QIcon, QDesktopServices
 from stratagem_data import STRATAGEMS
+from version import VERSION, APP_NAME, GITHUB_REPO_OWNER, GITHUB_REPO_NAME
+import update_checker
 
 PROFILES_DIR = "profiles"
 ASSETS_DIR = "assets"
@@ -139,6 +141,88 @@ def get_stratagem_name(old_name):
         "Illumination Flare": "Orbital Illumination Flare",
     }
     return name_map.get(old_name, old_name)
+
+class UpdateDialog(QDialog):
+    def __init__(self, update_info, parent=None):
+        super().__init__(parent)
+        self.update_info = update_info
+        self.setObjectName("update_dialog")
+        self.setWindowTitle("Update Available")
+        self.setMinimumWidth(500)
+        self.setMinimumHeight(400)
+        
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        
+        # Title
+        title = QLabel(f"New version available: {update_info['latest_version']}")
+        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        title.setStyleSheet("color: #3ddc84; padding: 10px;")
+        layout.addWidget(title)
+        
+        # Version info
+        version_info = QLabel(
+            f"Current version: {update_info['current_version']}\n"
+            f"Latest version: {update_info['latest_version']}"
+        )
+        version_info.setStyleSheet("color: #ddd; padding: 5px;")
+        layout.addWidget(version_info)
+        
+        # Release notes
+        notes_label = QLabel("Release Notes:")
+        notes_label.setFont(QFont("Arial", 11, QFont.Weight.Bold))
+        notes_label.setStyleSheet("color: #ddd; margin-top: 10px;")
+        layout.addWidget(notes_label)
+        
+        notes_browser = QTextBrowser()
+        notes_browser.setObjectName("release_notes")
+        notes_browser.setOpenExternalLinks(True)
+        notes_browser.setMarkdown(update_info['release_notes'])
+        notes_browser.setStyleSheet(
+            "background: #1a1a1a; color: #ccc; border: 1px solid #333; "
+            "padding: 8px; border-radius: 4px;"
+        )
+        layout.addWidget(notes_browser)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch(1)
+        
+        skip_btn = QPushButton("Skip This Version")
+        skip_btn.setObjectName("update_skip")
+        skip_btn.clicked.connect(self.skip_version)
+        btn_layout.addWidget(skip_btn)
+        
+        later_btn = QPushButton("Later")
+        later_btn.setObjectName("update_later")
+        later_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(later_btn)
+        
+        download_btn = QPushButton("Download")
+        download_btn.setObjectName("update_download")
+        download_btn.setStyleSheet(
+            "background: #3ddc84; color: #000; font-weight: bold; "
+            "padding: 8px 20px; border-radius: 4px;"
+        )
+        download_btn.clicked.connect(self.download_update)
+        btn_layout.addWidget(download_btn)
+        
+        layout.addLayout(btn_layout)
+    
+    def download_update(self):
+        """Open download URL in browser"""
+        url = self.update_info.get('download_url', self.update_info.get('release_url', ''))
+        if url:
+            webbrowser.open(url)
+        self.accept()
+    
+    def skip_version(self):
+        """Mark this version as skipped"""
+        if self.parent():
+            self.parent().global_settings['skipped_version'] = self.update_info['latest_version']
+            self.parent().save_global_settings()
+        self.reject()
+
 
 class TestEnvironment(QDialog):
     def __init__(self):
@@ -419,6 +503,38 @@ class SettingsWindow(QDialog):
         windows_label.setObjectName("settings_label")
         windows_layout.addWidget(windows_label)
         
+        # Update checking
+        updates_section = QLabel("Updates")
+        updates_section.setStyleSheet("color: #ddd; font-weight: bold; padding-top: 15px;")
+        windows_layout.addWidget(updates_section)
+        
+        self.auto_update_check = QCheckBox("Check for updates on startup")
+        self.auto_update_check.setStyleSheet("color: #ddd; padding: 8px;")
+        if self.parent_app:
+            self.auto_update_check.setChecked(self.parent_app.global_settings.get("auto_check_updates", True))
+        windows_layout.addWidget(self.auto_update_check)
+        
+        check_now_btn = QPushButton("Check for Updates Now")
+        check_now_btn.setStyleSheet(
+            "background: #2a2a2a; color: #3ddc84; border: 1px solid #3ddc84; "
+            "padding: 8px 16px; border-radius: 4px; font-weight: bold;"
+        )
+        check_now_btn.clicked.connect(self.check_for_updates)
+        windows_layout.addWidget(check_now_btn)
+        
+        version_label = QLabel(f"Current Version: {VERSION}")
+        version_label.setStyleSheet("color: #888; font-size: 10px; padding: 5px;")
+        windows_layout.addWidget(version_label)
+        
+        update_desc = QLabel("Automatically check for new versions when the application starts.")
+        update_desc.setObjectName("settings_description")
+        update_desc.setWordWrap(True)
+        update_desc.setStyleSheet("color: #aaa; font-size: 11px; margin-top: 10px;")
+        windows_layout.addWidget(update_desc)
+        
+        # Separator
+        windows_layout.addSpacing(15)
+        
         self.minimize_tray_check = QCheckBox("Minimize to system tray on close")
         self.minimize_tray_check.setStyleSheet("color: #ddd; padding: 8px;")
         if self.parent_app:
@@ -468,6 +584,36 @@ class SettingsWindow(QDialog):
     def switch_tab(self, item):
         self.content_stack.setCurrentIndex(self.tab_list.row(item))
     
+    def check_for_updates(self):
+        """Check for updates manually"""
+        # Show checking message
+        self.sender().setEnabled(False)
+        self.sender().setText("Checking...")
+        QApplication.processEvents()
+        
+        result = update_checker.check_for_updates(
+            VERSION, GITHUB_REPO_OWNER, GITHUB_REPO_NAME
+        )
+        
+        self.sender().setEnabled(True)
+        self.sender().setText("Check for Updates Now")
+        
+        if not result['success']:
+            QMessageBox.warning(
+                self, "Update Check Failed",
+                f"Could not check for updates:\n{result['error']}"
+            )
+            return
+        
+        if result['has_update']:
+            dlg = UpdateDialog(result, self.parent_app)
+            dlg.exec()
+        else:
+            QMessageBox.information(
+                self, "No Updates",
+                f"You are running the latest version ({VERSION})."
+            )
+    
     def apply_and_close(self):
         if self.parent_app:
             # Save all settings
@@ -488,6 +634,7 @@ class SettingsWindow(QDialog):
             self.parent_app.global_settings["theme"] = new_theme
             self.parent_app.global_settings["minimize_to_tray"] = self.minimize_tray_check.isChecked()
             self.parent_app.global_settings["require_admin"] = new_require_admin
+            self.parent_app.global_settings["auto_check_updates"] = self.auto_update_check.isChecked()
             self.parent_app.save_global_settings()
             self.parent_app.update_speed_label(latency_value)
             
@@ -662,9 +809,14 @@ class StratagemApp(QMainWindow):
                 idx = self.profile_box.findText(last_profile)
                 if idx >= 0:
                     self.profile_box.setCurrentIndex(idx)
+        
+        # Check for updates on startup if enabled
+        if self.global_settings.get("auto_check_updates", True):
+            QTimer.singleShot(1000, self.check_for_updates_startup)
 
     def initUI(self):
         self.setObjectName("main_window")
+        self.setWindowTitle(f"{APP_NAME} v{VERSION}")
         # Apply theme-based stylesheet
         theme_name = self.global_settings.get("theme", "Dark (Default)")
         self.apply_theme(theme_name)
@@ -1211,6 +1363,25 @@ class StratagemApp(QMainWindow):
 
     def filter_icons(self, text):
         for w in self.icon_widgets: w.setVisible(text.lower() in w.name.lower())
+    
+    def check_for_updates_startup(self):
+        """Check for updates in background on startup"""
+        result = update_checker.check_for_updates(
+            VERSION, GITHUB_REPO_OWNER, GITHUB_REPO_NAME, timeout=10
+        )
+        
+        if not result['success']:
+            # Silently fail on startup check
+            return
+        
+        if result['has_update']:
+            # Check if this version was skipped
+            skipped_version = self.global_settings.get('skipped_version', '')
+            if skipped_version == result['latest_version']:
+                return  # Don't show dialog for skipped version
+            
+            dlg = UpdateDialog(result, self)
+            dlg.exec()
 
     def get_current_state(self):
         """Get the current state of the profile"""

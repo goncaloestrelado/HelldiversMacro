@@ -1,0 +1,149 @@
+"""
+Update checker for Helldivers Numpad Macros
+Checks GitHub releases for updates
+"""
+
+import json
+from urllib.request import urlopen, Request
+from urllib.error import URLError, HTTPError
+from packaging import version as version_parser
+
+
+def compare_versions(current, latest):
+    """
+    Compare two version strings
+    Returns: 1 if latest > current, 0 if equal, -1 if current > latest
+    """
+    try:
+        current_v = version_parser.parse(current)
+        latest_v = version_parser.parse(latest)
+        
+        if latest_v > current_v:
+            return 1
+        elif latest_v == current_v:
+            return 0
+        else:
+            return -1
+    except:
+        # Fallback to string comparison if parsing fails
+        if latest > current:
+            return 1
+        elif latest == current:
+            return 0
+        else:
+            return -1
+
+
+def check_for_updates(current_version, repo_owner, repo_name, timeout=5):
+    """
+    Check GitHub for the latest release
+    
+    Args:
+        current_version: Current app version (e.g., "1.0.0")
+        repo_owner: GitHub repository owner
+        repo_name: GitHub repository name
+        timeout: Request timeout in seconds
+    
+    Returns:
+        dict with keys:
+            - success: bool
+            - has_update: bool (only if success=True)
+            - latest_version: str (only if success=True)
+            - download_url: str (only if success=True)
+            - release_url: str (only if success=True)
+            - release_notes: str (only if success=True)
+            - error: str (only if success=False)
+    """
+    api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/latest"
+    
+    try:
+        # Create request with user agent (required by GitHub API)
+        request = Request(api_url, headers={'User-Agent': 'HelldiversMacro-UpdateChecker'})
+        
+        # Fetch latest release info
+        with urlopen(request, timeout=timeout) as response:
+            data = json.loads(response.read().decode())
+        
+        # Extract version from tag (remove 'v' prefix if present)
+        tag_name = data.get('tag_name', '')
+        latest_version = tag_name.lstrip('v')
+        
+        # Get release info
+        release_notes = data.get('body', 'No release notes available.')
+        release_url = data.get('html_url', '')
+        
+        # Find installer asset (prefer setup executable)
+        download_url = None
+        assets = data.get('assets', [])
+        
+        # Look for setup executable first
+        for asset in assets:
+            name = asset.get('name', '').lower()
+            if 'setup' in name and name.endswith('.exe'):
+                download_url = asset.get('browser_download_url')
+                break
+        
+        # Fallback to any .exe file
+        if not download_url:
+            for asset in assets:
+                name = asset.get('name', '').lower()
+                if name.endswith('.exe'):
+                    download_url = asset.get('browser_download_url')
+                    break
+        
+        # If no assets, use release page
+        if not download_url:
+            download_url = release_url
+        
+        # Compare versions
+        has_update = compare_versions(current_version, latest_version) > 0
+        
+        return {
+            'success': True,
+            'has_update': has_update,
+            'latest_version': latest_version,
+            'current_version': current_version,
+            'download_url': download_url,
+            'release_url': release_url,
+            'release_notes': release_notes
+        }
+        
+    except HTTPError as e:
+        if e.code == 404:
+            return {
+                'success': False,
+                'error': 'Repository or release not found. Check repository settings.'
+            }
+        else:
+            return {
+                'success': False,
+                'error': f'HTTP error {e.code}: {e.reason}'
+            }
+    
+    except URLError as e:
+        return {
+            'success': False,
+            'error': f'Network error: {str(e.reason)}'
+        }
+    
+    except json.JSONDecodeError:
+        return {
+            'success': False,
+            'error': 'Failed to parse GitHub API response.'
+        }
+    
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f'Unexpected error: {str(e)}'
+        }
+
+
+def format_release_notes(notes, max_length=500):
+    """
+    Format release notes for display (truncate if too long)
+    """
+    if len(notes) <= max_length:
+        return notes
+    
+    return notes[:max_length] + "..."
