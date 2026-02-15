@@ -773,16 +773,70 @@ class StratagemApp(QMainWindow):
 
         grid = QGridLayout()
         grid.setSpacing(12)
-        numpad_config = [
-            ('71', '7', 0, 0), ('72', '8', 0, 1), ('73', '9', 0, 2),
-            ('75', '4', 1, 0), ('76', '5', 1, 1), ('77', '6', 1, 2),
-            ('79', '1', 2, 0), ('80', '2', 2, 1), ('81', '3', 2, 2),
-            ('82', '0', 3, 0), ('83', '.', 3, 1), ('78', '+', 0, 3)
-        ]
-        for code, lbl, r, c in numpad_config:
-            slot = NumpadSlot(code, lbl, self)
-            grid.addWidget(slot, r, c)
-            self.slots[code] = slot
+        
+        slot = NumpadSlot('53', '/', self)
+        grid.addWidget(slot, 0, 1)
+        self.slots['53'] = slot
+        
+        slot = NumpadSlot('55', '*', self)
+        grid.addWidget(slot, 0, 2)
+        self.slots['55'] = slot
+        
+        slot = NumpadSlot('74', '-', self)
+        grid.addWidget(slot, 0, 3)
+        self.slots['74'] = slot
+        
+        slot = NumpadSlot('71', '7', self)
+        grid.addWidget(slot, 1, 0)
+        self.slots['71'] = slot
+        
+        slot = NumpadSlot('72', '8', self)
+        grid.addWidget(slot, 1, 1)
+        self.slots['72'] = slot
+        
+        slot = NumpadSlot('73', '9', self)
+        grid.addWidget(slot, 1, 2)
+        self.slots['73'] = slot
+        
+        slot = NumpadSlot('78', '+', self)
+        grid.addWidget(slot, 1, 3, 2, 1)
+        self.slots['78'] = slot
+        
+        slot = NumpadSlot('75', '4', self)
+        grid.addWidget(slot, 2, 0)
+        self.slots['75'] = slot
+        
+        slot = NumpadSlot('76', '5', self)
+        grid.addWidget(slot, 2, 1)
+        self.slots['76'] = slot
+        
+        slot = NumpadSlot('77', '6', self)
+        grid.addWidget(slot, 2, 2)
+        self.slots['77'] = slot
+        
+        slot = NumpadSlot('79', '1', self)
+        grid.addWidget(slot, 3, 0)
+        self.slots['79'] = slot
+        
+        slot = NumpadSlot('80', '2', self)
+        grid.addWidget(slot, 3, 1)
+        self.slots['80'] = slot
+        
+        slot = NumpadSlot('81', '3', self)
+        grid.addWidget(slot, 3, 2)
+        self.slots['81'] = slot
+        
+        slot = NumpadSlot('28', 'Enter', self)
+        grid.addWidget(slot, 3, 3, 2, 1)
+        self.slots['28'] = slot
+        
+        slot = NumpadSlot('82', '0', self)
+        grid.addWidget(slot, 4, 0, 1, 2)
+        self.slots['82'] = slot
+        
+        slot = NumpadSlot('83', '.', self)
+        grid.addWidget(slot, 4, 2)
+        self.slots['83'] = slot
 
         content.addWidget(side_container); content.addLayout(grid); main_vbox.addLayout(content)
 
@@ -1057,7 +1111,6 @@ class StratagemApp(QMainWindow):
             slot = self.slots.get(str(event.scan_code))
             if slot and slot.assigned_stratagem:
                 if getattr(event, 'is_keypad', True):
-                    # Convert old names to new names for backward compatibility
                     stratagem_name = get_stratagem_name(slot.assigned_stratagem)
                     seq = STRATAGEMS.get(stratagem_name)
                     if seq:

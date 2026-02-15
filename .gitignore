@@ -66,3 +66,6 @@ profiles/*.json
 
 # Local launchers
 Helldivers 2.bat
+
+# Tools
+detect_scancodes.py
