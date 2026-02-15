@@ -83,81 +83,79 @@ def find_svg_path(name):
                     return os.path.join(root, f)
     return None
 
-def get_stratagem_name(old_name):
-    """Convert old stratagem names to new official names for backward compatibility"""
-    name_map = {
-        "Machine Gun": "MG-43 Machine Gun",
-        "Anti-Materiel Rifle": "APW-1 Anti-Materiel Rifle",
-        "Stalwart": "M-105 Stalwart",
-        "Expendable Anti-Tank": "EAT-17 Expendable Anti-Tank",
-        "Recoilless Rifle": "GR-8 Recoilless Rifle",
-        "Flamethrower": "FLAM-40 Flamethrower",
-        "Autocannon": "AC-8 Autocannon",
-        "Heavy Machine Gun": "MG-206 Heavy Machine Gun",
-        "Airburst Rocket Launcher": "RL-77 Airburst Rocket Launcher",
-        "Commando": "MLS-4X Commando",
-        "Railgun": "RS-422 Railgun",
-        "Spear": "FAF-14 Spear",
-        "Jump Pack": "LIFT-850 Jump Pack",
-        "Eagle 500KG Bomb": "Eagle 500kg Bomb",
-        "Fast Recon Vehicle": "M-102 Fast Recon Vehicle",
-        "Bastion": "TD-220 Bastion",
-        "Bastion MK XVI": "TD-220 Bastion",
-        "HMG Emplacement": "E/MG-101 HMG Emplacement",
-        "Shield Generator Relay": "FX-12 Shield Generator Relay",
-        "Tesla Tower": "A/ARC-3 Tesla Tower",
-        "Grenadier Battlement": "E/GL-21 Grenadier Battlement",
-        "Anti-Personnel Minefield": "MD-6 Anti-Personnel Minefield",
-        "Supply Pack": "B-1 Supply Pack",
-        "Grenade Launcher": "GL-21 Grenade Launcher",
-        "Laser Cannon": "LAS-98 Laser Cannon",
-        "Incendiary Mines": "MD-I4 Incendiary Mines",
-        "Guard Dog Rover": "AX/LAS-5 \"Guard Dog\" Rover",
-        "Ballistic Shield Backpack": "SH-20 Ballistic Shield Backpack",
-        "Arc Thrower": "ARC-3 Arc Thrower",
-        "Anti-Tank Mines": "MD-17 Anti-Tank Mines",
-        "Quasar Cannon": "LAS-99 Quasar Cannon",
-        "Shield Generator Pack": "SH-32 Shield Generator Pack",
-        "Gas Mine": "MD-8 Gas Mines",
-        "Gas Mines": "MD-8 Gas Mines",
-        "Machine Gun Sentry": "A/MG-43 Machine Gun Sentry",
-        "Gatling Sentry": "A/G-16 Gatling Sentry",
-        "Mortar Sentry": "A/M-12 Mortar Sentry",
-        "Guard Dog": "AX/AR-23 \"Guard Dog\"",
-        "Autocannon Sentry": "A/AC-8 Autocannon Sentry",
-        "Rocket Sentry": "A/MLS-4X Rocket Sentry",
-        "EMS Mortar Sentry": "A/M-23 EMS Mortar Sentry",
-        "Patriot Exosuit": "EXO-45 Patriot Exosuit",
-        "Emancipator Exosuit": "EXO-49 Emancipator Exosuit",
-        "Sterilizer": "TX-41 Sterilizer",
-        "Guard Dog Breath": "AX/TX-13 \"Guard Dog\" Dog Breath",
-        "Guard Dog Dog Breath": "AX/TX-13 \"Guard Dog\" Dog Breath",
-        "Directional Shield": "SH-51 Directional Shield",
-        "Anti-Tank Emplacement": "E/AT-12 Anti-Tank Emplacement",
-        "Flame Sentry": "A/FLAM-40 Flame Sentry",
-        "Portable Hellbomb": "B-100 Portable Hellbomb",
-        "Hellbomb Portable": "B-100 Portable Hellbomb",
-        "Hover Pack": "LIFT-860 Hover Pack",
-        "One True Flag": "CQC-1 One True Flag",
-        "De-Escalator": "GL-52 De-Escalator",
-        "Guard Dog K-9": "AX/ARC-3 \"Guard Dog\" K-9",
-        "Epoch": "PLAS-45 Epoch",
-        "Laser Sentry": "A/LAS-98 Laser Sentry",
-        "Warp Pack": "LIFT-182 Warp Pack",
-        "Speargun": "S-11 Speargun",
-        "Expendable Napalm": "EAT-700 Expendable Napalm",
-        "Solo Silo": "MS-11 Solo Silo",
-        "Maxigun": "M-1000 Maxigun",
-        "Defoliation Tool": "CQC-9 Defoliation Tool",
-        "Guard Dog Hot Dog": "AX/FLAM-75 \"Guard Dog\" Hot Dog",
-        "C4 Pack": "B/MD C4 Pack",
-        "Breaching Hammer": "CQC-20 Breaching Hammer",
-        "CQC-20": "CQC-20 Breaching Hammer",
-        "EAT-411": "EAT-411 Leveller",
-        "GL-28": "GL-28 Belt-Fed Grenade Launcher",
-        "Illumination Flare": "Orbital Illumination Flare",
-    }
-    return name_map.get(old_name, old_name)
+# Legacy name mapping for automatic migration of old save files
+LEGACY_NAME_MAP = {
+    "Machine Gun": "MG-43 Machine Gun",
+    "Anti-Materiel Rifle": "APW-1 Anti-Materiel Rifle",
+    "Stalwart": "M-105 Stalwart",
+    "Expendable Anti-Tank": "EAT-17 Expendable Anti-Tank",
+    "Recoilless Rifle": "GR-8 Recoilless Rifle",
+    "Flamethrower": "FLAM-40 Flamethrower",
+    "Autocannon": "AC-8 Autocannon",
+    "Heavy Machine Gun": "MG-206 Heavy Machine Gun",
+    "Airburst Rocket Launcher": "RL-77 Airburst Rocket Launcher",
+    "Commando": "MLS-4X Commando",
+    "Railgun": "RS-422 Railgun",
+    "Spear": "FAF-14 Spear",
+    "Jump Pack": "LIFT-850 Jump Pack",
+    "Eagle 500KG Bomb": "Eagle 500kg Bomb",
+    "Fast Recon Vehicle": "M-102 Fast Recon Vehicle",
+    "Bastion": "TD-220 Bastion",
+    "Bastion MK XVI": "TD-220 Bastion",
+    "HMG Emplacement": "E/MG-101 HMG Emplacement",
+    "Shield Generator Relay": "FX-12 Shield Generator Relay",
+    "Tesla Tower": "A/ARC-3 Tesla Tower",
+    "Grenadier Battlement": "E/GL-21 Grenadier Battlement",
+    "Anti-Personnel Minefield": "MD-6 Anti-Personnel Minefield",
+    "Supply Pack": "B-1 Supply Pack",
+    "Grenade Launcher": "GL-21 Grenade Launcher",
+    "Laser Cannon": "LAS-98 Laser Cannon",
+    "Incendiary Mines": "MD-I4 Incendiary Mines",
+    "Guard Dog Rover": "AX/LAS-5 \"Guard Dog\" Rover",
+    "Ballistic Shield Backpack": "SH-20 Ballistic Shield Backpack",
+    "Arc Thrower": "ARC-3 Arc Thrower",
+    "Anti-Tank Mines": "MD-17 Anti-Tank Mines",
+    "Quasar Cannon": "LAS-99 Quasar Cannon",
+    "Shield Generator Pack": "SH-32 Shield Generator Pack",
+    "Gas Mine": "MD-8 Gas Mines",
+    "Gas Mines": "MD-8 Gas Mines",
+    "Machine Gun Sentry": "A/MG-43 Machine Gun Sentry",
+    "Gatling Sentry": "A/G-16 Gatling Sentry",
+    "Mortar Sentry": "A/M-12 Mortar Sentry",
+    "Guard Dog": "AX/AR-23 \"Guard Dog\"",
+    "Autocannon Sentry": "A/AC-8 Autocannon Sentry",
+    "Rocket Sentry": "A/MLS-4X Rocket Sentry",
+    "EMS Mortar Sentry": "A/M-23 EMS Mortar Sentry",
+    "Patriot Exosuit": "EXO-45 Patriot Exosuit",
+    "Emancipator Exosuit": "EXO-49 Emancipator Exosuit",
+    "Sterilizer": "TX-41 Sterilizer",
+    "Guard Dog Breath": "AX/TX-13 \"Guard Dog\" Dog Breath",
+    "Guard Dog Dog Breath": "AX/TX-13 \"Guard Dog\" Dog Breath",
+    "Directional Shield": "SH-51 Directional Shield",
+    "Anti-Tank Emplacement": "E/AT-12 Anti-Tank Emplacement",
+    "Flame Sentry": "A/FLAM-40 Flame Sentry",
+    "Portable Hellbomb": "B-100 Portable Hellbomb",
+    "Hellbomb Portable": "B-100 Portable Hellbomb",
+    "Hover Pack": "LIFT-860 Hover Pack",
+    "One True Flag": "CQC-1 One True Flag",
+    "De-Escalator": "GL-52 De-Escalator",
+    "Guard Dog K-9": "AX/ARC-3 \"Guard Dog\" K-9",
+    "Epoch": "PLAS-45 Epoch",
+    "Laser Sentry": "A/LAS-98 Laser Sentry",
+    "Warp Pack": "LIFT-182 Warp Pack",
+    "Speargun": "S-11 Speargun",
+    "Expendable Napalm": "EAT-700 Expendable Napalm",
+    "Solo Silo": "MS-11 Solo Silo",
+    "Maxigun": "M-1000 Maxigun",
+    "Defoliation Tool": "CQC-9 Defoliation Tool",
+    "Guard Dog Hot Dog": "AX/FLAM-75 \"Guard Dog\" Hot Dog",
+    "C4 Pack": "B/MD C4 Pack",
+    "Breaching Hammer": "CQC-20 Breaching Hammer",
+    "CQC-20": "CQC-20 Breaching Hammer",
+    "EAT-411": "EAT-411 Leveller",
+    "GL-28": "GL-28 Belt-Fed Grenade Launcher",
+    "Illumination Flare": "Orbital Illumination Flare",
+}
 
 class DownloadThread(QThread):
     """Thread for downloading installer"""
@@ -1585,8 +1583,26 @@ class StratagemApp(QMainWindow):
                 self.speed_slider.setValue(data.get("speed", 20))
                 self.speed_slider.blockSignals(False)
                 mappings = data.get("mappings", {})
+                
+                # Migrate old stratagem names to new names and track if changes were made
+                migrated = False
+                updated_mappings = {}
                 for code, strat in mappings.items():
-                    if code in self.slots: self.slots[code].assign(strat)
+                    if strat in LEGACY_NAME_MAP:
+                        updated_mappings[code] = LEGACY_NAME_MAP[strat]
+                        migrated = True
+                    else:
+                        updated_mappings[code] = strat
+                    
+                    if code in self.slots:
+                        self.slots[code].assign(updated_mappings[code])
+                
+                # If we migrated any names, save the updated profile
+                if migrated:
+                    data["mappings"] = updated_mappings
+                    with open(path, "w") as f:
+                        json.dump(data, f, indent=2)
+            
             self.sync_macro_hook_state()
             self.save_current_state()  # Save the loaded state
 
@@ -1600,7 +1616,7 @@ class StratagemApp(QMainWindow):
             slot = self.slots.get(str(event.scan_code))
             if slot and slot.assigned_stratagem:
                 if getattr(event, 'is_keypad', True):
-                    stratagem_name = get_stratagem_name(slot.assigned_stratagem)
+                    stratagem_name = slot.assigned_stratagem
                     seq = STRATAGEMS.get(stratagem_name)
                     if seq:
                         slot.run_macro(stratagem_name, seq, slot.label_text)
