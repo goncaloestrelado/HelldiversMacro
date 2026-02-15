@@ -244,6 +244,7 @@ class SettingsWindow(QDialog):
         self.tab_list.setFixedWidth(120)
         self.tab_list.setStyleSheet("background: #0a0a0a; border-right: 1px solid #333;")
         self.tab_list.addItem("Latency")
+        self.tab_list.addItem("Controls")
         self.tab_list.addItem("Autoload")
         self.tab_list.addItem("Notifications")
         self.tab_list.addItem("Appearance")
@@ -293,6 +294,39 @@ class SettingsWindow(QDialog):
         
         latency_layout.addStretch(1)
         self.content_stack.addWidget(latency_widget)
+        
+        # ===== CONTROLS TAB =====
+        controls_widget = QWidget()
+        controls_layout = QVBoxLayout(controls_widget)
+        
+        controls_label = QLabel("Stratagem Controls")
+        controls_label.setObjectName("settings_label")
+        controls_layout.addWidget(controls_label)
+        
+        keys_label = QLabel("Key Binding:")
+        keys_label.setStyleSheet("color: #ddd; padding-top: 8px;")
+        controls_layout.addWidget(keys_label)
+        
+        self.keybind_combo = QComboBox()
+        self.keybind_combo.setStyleSheet("background: #1a1a1a; color: #ddd; border: 1px solid #333; padding: 4px;")
+        self.keybind_combo.addItem("Arrow Keys (Recommended)")
+        self.keybind_combo.addItem("WASD Keys")
+        if self.parent_app:
+            keybind_mode = self.parent_app.global_settings.get("keybind_mode", "arrows")
+            if keybind_mode == "wasd":
+                self.keybind_combo.setCurrentIndex(1)
+            else:
+                self.keybind_combo.setCurrentIndex(0)
+        controls_layout.addWidget(self.keybind_combo)
+        
+        controls_desc = QLabel("Choose which keys to use for executing stratagems.\nArrow Keys (Recommended): Uses ↑↓←→ for stratagem inputs.\nWASD: Uses W/A/S/D keys for stratagem inputs.")
+        controls_desc.setObjectName("settings_description")
+        controls_desc.setWordWrap(True)
+        controls_desc.setStyleSheet("color: #aaa; font-size: 11px; margin-top: 10px;")
+        controls_layout.addWidget(controls_desc)
+        
+        controls_layout.addStretch(1)
+        self.content_stack.addWidget(controls_widget)
         
         # ===== AUTOLOAD TAB =====
         autoload_widget = QWidget()
@@ -444,7 +478,10 @@ class SettingsWindow(QDialog):
             new_require_admin = self.require_admin_check.isChecked()
             
             self.parent_app.speed_slider.setValue(latency_value)
+            keybind_mode = "arrows" if self.keybind_combo.currentIndex() == 0 else "wasd"
+            
             self.parent_app.global_settings["latency"] = latency_value
+            self.parent_app.global_settings["keybind_mode"] = keybind_mode
             self.parent_app.global_settings["autoload_profile"] = self.autoload_check.isChecked()
             self.parent_app.global_settings["sound_enabled"] = self.sound_check.isChecked()
             self.parent_app.global_settings["visual_enabled"] = self.visual_check.isChecked()
@@ -590,9 +627,10 @@ class NumpadSlot(QWidget):
         comm.update_test_display.emit(name, sequence, key_label)
         delay = self.parent_app.speed_slider.value() / 1000.0
         for move in sequence:
-            keyboard.press(move)
+            actual_key = self.parent_app.map_direction_to_key(move)
+            keyboard.press(actual_key)
             time.sleep(delay) 
-            keyboard.release(move)
+            keyboard.release(actual_key)
             time.sleep(delay)
         
         # Add notifications after macro executes
@@ -946,6 +984,27 @@ class StratagemApp(QMainWindow):
     def sync_macro_hook_state(self, notify=False):
         self.set_macros_enabled(self.global_settings.get("macros_enabled", False), notify=notify)
 
+    def map_direction_to_key(self, direction):
+        """Map stratagem direction to actual key based on user setting"""
+        keybind_mode = self.global_settings.get("keybind_mode", "arrows")
+        
+        if keybind_mode == "wasd":
+            mapping = {
+                "up": "w",
+                "down": "s",
+                "left": "a",
+                "right": "d"
+            }
+        else:  # arrows (default)
+            mapping = {
+                "up": "up",
+                "down": "down",
+                "left": "left",
+                "right": "right"
+            }
+        
+        return mapping.get(direction, direction)
+    
     def load_global_settings(self):
         """Load global settings from general.json"""
         try:
@@ -953,13 +1012,17 @@ class StratagemApp(QMainWindow):
                 with open("general.json", "r") as f:
                     self.global_settings = json.load(f)
             else:
-                self.global_settings = {"latency": 20, "macros_enabled": False}
+                self.global_settings = {"latency": 20, "macros_enabled": False, "keybind_mode": "arrows"}
                 self.save_global_settings()
         except Exception:
-            self.global_settings = {"latency": 20, "macros_enabled": False}
+            self.global_settings = {"latency": 20, "macros_enabled": False, "keybind_mode": "arrows"}
 
         if "macros_enabled" not in self.global_settings:
             self.global_settings["macros_enabled"] = False
+            self.save_global_settings()
+        
+        if "keybind_mode" not in self.global_settings:
+            self.global_settings["keybind_mode"] = "arrows"
             self.save_global_settings()
 
     def save_global_settings(self):
