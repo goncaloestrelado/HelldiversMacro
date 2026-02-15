@@ -1,12 +1,15 @@
-import sys, json, keyboard, time, os, winsound, re, ctypes
+import sys, json, keyboard, time, os, winsound, re, ctypes, webbrowser, tempfile, subprocess
+from urllib.request import urlopen, Request
 from PyQt6.QtWidgets import (QApplication, QWidget, QGridLayout, QLabel, 
                              QHBoxLayout, QVBoxLayout, QScrollArea, QLineEdit, 
                              QPushButton, QFileDialog, QMessageBox, QDialog,
-                             QComboBox, QInputDialog, QSlider, QMenuBar, QSpinBox, QMainWindow, QMenu, QListWidget, QStackedWidget, QListWidgetItem, QCheckBox, QSystemTrayIcon, QToolButton, QStyle, QSizePolicy)
-from PyQt6.QtCore import Qt, QMimeData, pyqtSignal, QObject, QTimer, QRect, QEvent
+                             QComboBox, QInputDialog, QSlider, QMenuBar, QSpinBox, QMainWindow, QMenu, QListWidget, QStackedWidget, QListWidgetItem, QCheckBox, QSystemTrayIcon, QToolButton, QStyle, QSizePolicy, QTextBrowser, QProgressBar)
+from PyQt6.QtCore import Qt, QMimeData, pyqtSignal, QObject, QTimer, QRect, QEvent, QThread
 from PyQt6.QtSvgWidgets import QSvgWidget
-from PyQt6.QtGui import QDrag, QFont, QPixmap, QAction, QIcon
+from PyQt6.QtGui import QDrag, QFont, QPixmap, QAction, QIcon, QDesktopServices
 from stratagem_data import STRATAGEMS
+from version import VERSION, APP_NAME, GITHUB_REPO_OWNER, GITHUB_REPO_NAME
+import update_checker
 
 PROFILES_DIR = "profiles"
 ASSETS_DIR = "assets"
@@ -28,6 +31,22 @@ comm = Comm()
 
 def normalize(name):
     return name.lower().replace(" ", "").replace("_", "").replace("-", "").replace("/", "").replace('"', "")
+
+def is_installed():
+    """Check if app is installed or running portable"""
+    exe_path = sys.executable if getattr(sys, 'frozen', False) else __file__
+    exe_dir = os.path.dirname(os.path.abspath(exe_path))
+    
+    # Check if running from Program Files or similar installation directories
+    program_files = os.environ.get('ProgramFiles', 'C:\\Program Files')
+    program_files_x86 = os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)')
+    
+    return exe_dir.startswith(program_files) or exe_dir.startswith(program_files_x86)
+
+def get_installer_filename(tag_name):
+    """Generate expected installer filename from tag"""
+    version = tag_name.lstrip('v').replace('beta', '')
+    return f"HelldiversNumpadMacros-Setup-{tag_name}.exe"
 
 def is_admin():
     """Check if the current process has administrator privileges"""
@@ -64,81 +83,408 @@ def find_svg_path(name):
                     return os.path.join(root, f)
     return None
 
-def get_stratagem_name(old_name):
-    """Convert old stratagem names to new official names for backward compatibility"""
-    name_map = {
-        "Machine Gun": "MG-43 Machine Gun",
-        "Anti-Materiel Rifle": "APW-1 Anti-Materiel Rifle",
-        "Stalwart": "M-105 Stalwart",
-        "Expendable Anti-Tank": "EAT-17 Expendable Anti-Tank",
-        "Recoilless Rifle": "GR-8 Recoilless Rifle",
-        "Flamethrower": "FLAM-40 Flamethrower",
-        "Autocannon": "AC-8 Autocannon",
-        "Heavy Machine Gun": "MG-206 Heavy Machine Gun",
-        "Airburst Rocket Launcher": "RL-77 Airburst Rocket Launcher",
-        "Commando": "MLS-4X Commando",
-        "Railgun": "RS-422 Railgun",
-        "Spear": "FAF-14 Spear",
-        "Jump Pack": "LIFT-850 Jump Pack",
-        "Eagle 500KG Bomb": "Eagle 500kg Bomb",
-        "Fast Recon Vehicle": "M-102 Fast Recon Vehicle",
-        "Bastion": "TD-220 Bastion",
-        "Bastion MK XVI": "TD-220 Bastion",
-        "HMG Emplacement": "E/MG-101 HMG Emplacement",
-        "Shield Generator Relay": "FX-12 Shield Generator Relay",
-        "Tesla Tower": "A/ARC-3 Tesla Tower",
-        "Grenadier Battlement": "E/GL-21 Grenadier Battlement",
-        "Anti-Personnel Minefield": "MD-6 Anti-Personnel Minefield",
-        "Supply Pack": "B-1 Supply Pack",
-        "Grenade Launcher": "GL-21 Grenade Launcher",
-        "Laser Cannon": "LAS-98 Laser Cannon",
-        "Incendiary Mines": "MD-I4 Incendiary Mines",
-        "Guard Dog Rover": "AX/LAS-5 \"Guard Dog\" Rover",
-        "Ballistic Shield Backpack": "SH-20 Ballistic Shield Backpack",
-        "Arc Thrower": "ARC-3 Arc Thrower",
-        "Anti-Tank Mines": "MD-17 Anti-Tank Mines",
-        "Quasar Cannon": "LAS-99 Quasar Cannon",
-        "Shield Generator Pack": "SH-32 Shield Generator Pack",
-        "Gas Mine": "MD-8 Gas Mines",
-        "Gas Mines": "MD-8 Gas Mines",
-        "Machine Gun Sentry": "A/MG-43 Machine Gun Sentry",
-        "Gatling Sentry": "A/G-16 Gatling Sentry",
-        "Mortar Sentry": "A/M-12 Mortar Sentry",
-        "Guard Dog": "AX/AR-23 \"Guard Dog\"",
-        "Autocannon Sentry": "A/AC-8 Autocannon Sentry",
-        "Rocket Sentry": "A/MLS-4X Rocket Sentry",
-        "EMS Mortar Sentry": "A/M-23 EMS Mortar Sentry",
-        "Patriot Exosuit": "EXO-45 Patriot Exosuit",
-        "Emancipator Exosuit": "EXO-49 Emancipator Exosuit",
-        "Sterilizer": "TX-41 Sterilizer",
-        "Guard Dog Breath": "AX/TX-13 \"Guard Dog\" Dog Breath",
-        "Guard Dog Dog Breath": "AX/TX-13 \"Guard Dog\" Dog Breath",
-        "Directional Shield": "SH-51 Directional Shield",
-        "Anti-Tank Emplacement": "E/AT-12 Anti-Tank Emplacement",
-        "Flame Sentry": "A/FLAM-40 Flame Sentry",
-        "Portable Hellbomb": "B-100 Portable Hellbomb",
-        "Hellbomb Portable": "B-100 Portable Hellbomb",
-        "Hover Pack": "LIFT-860 Hover Pack",
-        "One True Flag": "CQC-1 One True Flag",
-        "De-Escalator": "GL-52 De-Escalator",
-        "Guard Dog K-9": "AX/ARC-3 \"Guard Dog\" K-9",
-        "Epoch": "PLAS-45 Epoch",
-        "Laser Sentry": "A/LAS-98 Laser Sentry",
-        "Warp Pack": "LIFT-182 Warp Pack",
-        "Speargun": "S-11 Speargun",
-        "Expendable Napalm": "EAT-700 Expendable Napalm",
-        "Solo Silo": "MS-11 Solo Silo",
-        "Maxigun": "M-1000 Maxigun",
-        "Defoliation Tool": "CQC-9 Defoliation Tool",
-        "Guard Dog Hot Dog": "AX/FLAM-75 \"Guard Dog\" Hot Dog",
-        "C4 Pack": "B/MD C4 Pack",
-        "Breaching Hammer": "CQC-20 Breaching Hammer",
-        "CQC-20": "CQC-20 Breaching Hammer",
-        "EAT-411": "EAT-411 Leveller",
-        "GL-28": "GL-28 Belt-Fed Grenade Launcher",
-        "Illumination Flare": "Orbital Illumination Flare",
-    }
-    return name_map.get(old_name, old_name)
+# Legacy name mapping for automatic migration of old save files
+LEGACY_NAME_MAP = {
+    "Machine Gun": "MG-43 Machine Gun",
+    "Anti-Materiel Rifle": "APW-1 Anti-Materiel Rifle",
+    "Stalwart": "M-105 Stalwart",
+    "Expendable Anti-Tank": "EAT-17 Expendable Anti-Tank",
+    "Recoilless Rifle": "GR-8 Recoilless Rifle",
+    "Flamethrower": "FLAM-40 Flamethrower",
+    "Autocannon": "AC-8 Autocannon",
+    "Heavy Machine Gun": "MG-206 Heavy Machine Gun",
+    "Airburst Rocket Launcher": "RL-77 Airburst Rocket Launcher",
+    "Commando": "MLS-4X Commando",
+    "Railgun": "RS-422 Railgun",
+    "Spear": "FAF-14 Spear",
+    "Jump Pack": "LIFT-850 Jump Pack",
+    "Eagle 500KG Bomb": "Eagle 500kg Bomb",
+    "Fast Recon Vehicle": "M-102 Fast Recon Vehicle",
+    "Bastion": "TD-220 Bastion",
+    "Bastion MK XVI": "TD-220 Bastion",
+    "HMG Emplacement": "E/MG-101 HMG Emplacement",
+    "Shield Generator Relay": "FX-12 Shield Generator Relay",
+    "Tesla Tower": "A/ARC-3 Tesla Tower",
+    "Grenadier Battlement": "E/GL-21 Grenadier Battlement",
+    "Anti-Personnel Minefield": "MD-6 Anti-Personnel Minefield",
+    "Supply Pack": "B-1 Supply Pack",
+    "Grenade Launcher": "GL-21 Grenade Launcher",
+    "Laser Cannon": "LAS-98 Laser Cannon",
+    "Incendiary Mines": "MD-I4 Incendiary Mines",
+    "Guard Dog Rover": "AX/LAS-5 \"Guard Dog\" Rover",
+    "Ballistic Shield Backpack": "SH-20 Ballistic Shield Backpack",
+    "Arc Thrower": "ARC-3 Arc Thrower",
+    "Anti-Tank Mines": "MD-17 Anti-Tank Mines",
+    "Quasar Cannon": "LAS-99 Quasar Cannon",
+    "Shield Generator Pack": "SH-32 Shield Generator Pack",
+    "Gas Mine": "MD-8 Gas Mines",
+    "Gas Mines": "MD-8 Gas Mines",
+    "Machine Gun Sentry": "A/MG-43 Machine Gun Sentry",
+    "Gatling Sentry": "A/G-16 Gatling Sentry",
+    "Mortar Sentry": "A/M-12 Mortar Sentry",
+    "Guard Dog": "AX/AR-23 \"Guard Dog\"",
+    "Autocannon Sentry": "A/AC-8 Autocannon Sentry",
+    "Rocket Sentry": "A/MLS-4X Rocket Sentry",
+    "EMS Mortar Sentry": "A/M-23 EMS Mortar Sentry",
+    "Patriot Exosuit": "EXO-45 Patriot Exosuit",
+    "Emancipator Exosuit": "EXO-49 Emancipator Exosuit",
+    "Sterilizer": "TX-41 Sterilizer",
+    "Guard Dog Breath": "AX/TX-13 \"Guard Dog\" Dog Breath",
+    "Guard Dog Dog Breath": "AX/TX-13 \"Guard Dog\" Dog Breath",
+    "Directional Shield": "SH-51 Directional Shield",
+    "Anti-Tank Emplacement": "E/AT-12 Anti-Tank Emplacement",
+    "Flame Sentry": "A/FLAM-40 Flame Sentry",
+    "Portable Hellbomb": "B-100 Portable Hellbomb",
+    "Hellbomb Portable": "B-100 Portable Hellbomb",
+    "Hover Pack": "LIFT-860 Hover Pack",
+    "One True Flag": "CQC-1 One True Flag",
+    "De-Escalator": "GL-52 De-Escalator",
+    "Guard Dog K-9": "AX/ARC-3 \"Guard Dog\" K-9",
+    "Epoch": "PLAS-45 Epoch",
+    "Laser Sentry": "A/LAS-98 Laser Sentry",
+    "Warp Pack": "LIFT-182 Warp Pack",
+    "Speargun": "S-11 Speargun",
+    "Expendable Napalm": "EAT-700 Expendable Napalm",
+    "Solo Silo": "MS-11 Solo Silo",
+    "Maxigun": "M-1000 Maxigun",
+    "Defoliation Tool": "CQC-9 Defoliation Tool",
+    "Guard Dog Hot Dog": "AX/FLAM-75 \"Guard Dog\" Hot Dog",
+    "C4 Pack": "B/MD C4 Pack",
+    "Breaching Hammer": "CQC-20 Breaching Hammer",
+    "CQC-20": "CQC-20 Breaching Hammer",
+    "EAT-411": "EAT-411 Leveller",
+    "GL-28": "GL-28 Belt-Fed Grenade Launcher",
+    "Illumination Flare": "Orbital Illumination Flare",
+}
+
+class DownloadThread(QThread):
+    """Thread for downloading installer"""
+    progress = pyqtSignal(int, int)  # downloaded, total
+    finished = pyqtSignal(str)  # file path
+    error = pyqtSignal(str)  # error message
+    
+    def __init__(self, url, filename):
+        super().__init__()
+        self.url = url
+        self.filename = filename
+        self.cancelled = False
+    
+    def run(self):
+        try:
+            request = Request(self.url, headers={'User-Agent': 'HelldiversMacro-UpdateChecker'})
+            temp_dir = tempfile.gettempdir()
+            file_path = os.path.join(temp_dir, self.filename)
+            
+            with urlopen(request, timeout=30) as response:
+                total_size = int(response.headers.get('Content-Length', 0))
+                downloaded = 0
+                chunk_size = 8192
+                
+                with open(file_path, 'wb') as f:
+                    while not self.cancelled:
+                        chunk = response.read(chunk_size)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        self.progress.emit(downloaded, total_size)
+            
+            if not self.cancelled:
+                self.finished.emit(file_path)
+        except Exception as e:
+            self.error.emit(str(e))
+    
+    def cancel(self):
+        self.cancelled = True
+
+class SetupDialog(QDialog):
+    """Dialog for installing/updating the application"""
+    def __init__(self, update_info, parent=None):
+        super().__init__(parent)
+        self.update_info = update_info
+        self.installer_path = None
+        self.download_thread = None
+        self.is_app_installed = is_installed()
+        
+        self.setObjectName("setup_dialog")
+        self.setWindowTitle("Setup - Install Update")
+        self.setMinimumWidth(500)
+        self.setMinimumHeight(300)
+        
+        layout = QVBoxLayout(self)
+        layout.setSpacing(15)
+        
+        # Title
+        if self.is_app_installed:
+            title_text = f"Update to {update_info.get('tag_name', update_info['latest_version'])}"
+            desc_text = "The installer will be downloaded and launched to update your installation."
+        else:
+            title_text = f"Install {update_info.get('tag_name', update_info['latest_version'])}"
+            desc_text = "You are running the portable version. Install to get automatic updates."
+        
+        title = QLabel(title_text)
+        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        title.setStyleSheet("color: #3ddc84;")
+        layout.addWidget(title)
+        
+        desc = QLabel(desc_text)
+        desc.setWordWrap(True)
+        desc.setStyleSheet("color: #ccc; padding: 10px 0;")
+        layout.addWidget(desc)
+        
+        # Installation path (only for portable)
+        if not self.is_app_installed:
+            path_label = QLabel("Installation path:")
+            path_label.setStyleSheet("color: #ddd; margin-top: 10px;")
+            layout.addWidget(path_label)
+            
+            path_layout = QHBoxLayout()
+            self.path_input = QLineEdit()
+            default_path = os.path.join(os.environ.get('ProgramFiles', 'C:\\Program Files'), APP_NAME)
+            self.path_input.setText(default_path)
+            self.path_input.setStyleSheet("background: #1a1a1a; color: #ddd; padding: 5px; border: 1px solid #333;")
+            path_layout.addWidget(self.path_input)
+            
+            browse_btn = QPushButton("Browse...")
+            browse_btn.clicked.connect(self.browse_path)
+            path_layout.addWidget(browse_btn)
+            layout.addLayout(path_layout)
+        
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setStyleSheet(
+            "QProgressBar { background: #1a1a1a; border: 1px solid #333; border-radius: 4px; text-align: center; color: #ddd; }"
+            "QProgressBar::chunk { background: #3ddc84; }"
+        )
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar)
+        
+        # Status label
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("color: #aaa; font-size: 11px;")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.status_label)
+        
+        layout.addStretch(1)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch(1)
+        
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.clicked.connect(self.cancel_setup)
+        btn_layout.addWidget(self.cancel_btn)
+        
+        self.install_btn = QPushButton("Install" if not self.is_app_installed else "Update")
+        self.install_btn.setStyleSheet(
+            "background: #3ddc84; color: #000; font-weight: bold; "
+            "padding: 8px 20px; border-radius: 4px;"
+        )
+        self.install_btn.clicked.connect(self.start_installation)
+        btn_layout.addWidget(self.install_btn)
+        
+        layout.addLayout(btn_layout)
+    
+    def browse_path(self):
+        """Browse for installation directory"""
+        path = QFileDialog.getExistingDirectory(self, "Select Installation Directory")
+        if path:
+            self.path_input.setText(path)
+    
+    def start_installation(self):
+        """Download and run installer"""
+        # Find installer asset
+        download_url = None
+        assets = self.update_info.get('assets', [])
+        
+        # Look for setup executable
+        for asset in assets:
+            name = asset.get('name', '').lower()
+            if 'setup' in name and name.endswith('.exe'):
+                download_url = asset.get('browser_download_url')
+                break
+        
+        if not download_url:
+            # Fallback: construct expected download URL
+            tag_name = self.update_info.get('tag_name', self.update_info['latest_version'])
+            filename = get_installer_filename(tag_name)
+            download_url = f"https://github.com/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases/download/{tag_name}/{filename}"
+        
+        # Start download
+        self.install_btn.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.status_label.setText("Downloading installer...")
+        
+        filename = os.path.basename(download_url.split('?')[0])  # Remove query params
+        self.download_thread = DownloadThread(download_url, filename)
+        self.download_thread.progress.connect(self.update_progress)
+        self.download_thread.finished.connect(self.run_installer)
+        self.download_thread.error.connect(self.download_error)
+        self.download_thread.start()
+    
+    def update_progress(self, downloaded, total):
+        """Update download progress"""
+        if total > 0:
+            percent = int((downloaded / total) * 100)
+            self.progress_bar.setValue(percent)
+            mb_downloaded = downloaded / (1024 * 1024)
+            mb_total = total / (1024 * 1024)
+            self.status_label.setText(f"Downloading: {mb_downloaded:.1f} MB / {mb_total:.1f} MB")
+    
+    def run_installer(self, file_path):
+        """Run the downloaded installer"""
+        self.installer_path = file_path
+        self.status_label.setText("Download complete! Launching installer...")
+        self.progress_bar.setValue(100)
+        
+        try:
+            # Prepare installer arguments
+            if self.is_app_installed:
+                # Silent update (or with minimal UI)
+                subprocess.Popen([file_path, '/SILENT'])
+            else:
+                # Install to custom directory
+                install_dir = self.path_input.text()
+                subprocess.Popen([file_path, f'/DIR="{install_dir}"'])
+            
+            QMessageBox.information(
+                self, "Installer Launched",
+                "The installer has been launched. This application will now close.\n\n"
+                "Please complete the installation and restart the application."
+            )
+            
+            # Close the application
+            self.accept()
+            QApplication.quit()
+            
+        except Exception as e:
+            self.download_error(f"Failed to launch installer: {str(e)}")
+    
+    def download_error(self, error_msg):
+        """Handle download error"""
+        self.install_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        self.status_label.setText("")
+        
+        QMessageBox.warning(
+            self, "Download Failed",
+            f"Failed to download installer:\n{error_msg}\n\n"
+            "Please download manually from GitHub."
+        )
+    
+    def cancel_setup(self):
+        """Cancel installation"""
+        if self.download_thread and self.download_thread.isRunning():
+            self.download_thread.cancel()
+            self.download_thread.wait()
+        self.reject()
+
+class UpdateDialog(QDialog):
+    def __init__(self, update_info, parent=None):
+        super().__init__(parent)
+        self.update_info = update_info
+        self.setObjectName("update_dialog")
+        self.setWindowTitle("Update Available")
+        self.setMinimumWidth(500)
+        self.setMinimumHeight(400)
+        
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        
+        # Title with clickable link
+        title = QLabel(f"New version available: <a href=\"{update_info['release_url']}\" style=\"color: #3ddc84; text-decoration: none;\">{update_info.get('tag_name', update_info['latest_version'])}</a>")
+        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        title.setStyleSheet("color: #3ddc84; padding: 10px;")
+        title.setOpenExternalLinks(True)
+        title.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(title)
+        
+        # Version info
+        version_info = QLabel(
+            f"Current version: {update_info['current_version']}\n"
+            f"Latest version: {update_info.get('tag_name', update_info['latest_version'])}"
+        )
+        version_info.setStyleSheet("color: #ddd; padding: 5px;")
+        layout.addWidget(version_info)
+        
+        # Release notes
+        notes_label = QLabel("Release Notes:")
+        notes_label.setFont(QFont("Arial", 11, QFont.Weight.Bold))
+        notes_label.setStyleSheet("color: #ddd; margin-top: 10px;")
+        layout.addWidget(notes_label)
+        
+        notes_browser = QTextBrowser()
+        notes_browser.setObjectName("release_notes")
+        notes_browser.setOpenExternalLinks(True)
+        notes_browser.setMarkdown(update_info['release_notes'])
+        notes_browser.setStyleSheet(
+            "background: #1a1a1a; color: #ccc; border: 1px solid #333; "
+            "padding: 8px; border-radius: 4px;"
+        )
+        layout.addWidget(notes_browser)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch(1)
+        
+        skip_btn = QPushButton("Skip This Version")
+        skip_btn.setObjectName("update_skip")
+        skip_btn.clicked.connect(self.skip_version)
+        btn_layout.addWidget(skip_btn)
+        
+        later_btn = QPushButton("Later")
+        later_btn.setObjectName("update_later")
+        later_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(later_btn)
+        
+        # Show Install/Update button or just Download for browser
+        is_app_installed = is_installed()
+        if is_app_installed:
+            install_btn = QPushButton("Install Update")
+        else:
+            install_btn = QPushButton("Install")
+        
+        install_btn.setObjectName("update_install")
+        install_btn.setStyleSheet(
+            "background: #3ddc84; color: #000; font-weight: bold; "
+            "padding: 8px 20px; border-radius: 4px;"
+        )
+        install_btn.clicked.connect(self.show_setup)
+        btn_layout.addWidget(install_btn)
+        
+        # Manual download button
+        download_btn = QPushButton("Download Only")
+        download_btn.setObjectName("update_download")
+        download_btn.setToolTip("Download installer manually")
+        download_btn.clicked.connect(self.download_update)
+        btn_layout.addWidget(download_btn)
+        
+        layout.addLayout(btn_layout)
+    
+    def show_setup(self):
+        """Show setup dialog to install/update"""
+        self.hide()
+        setup_dlg = SetupDialog(self.update_info, self.parent())
+        result = setup_dlg.exec()
+        if result == QDialog.DialogCode.Rejected:
+            self.show()  # Show update dialog again if setup was cancelled
+        else:
+            self.accept()  # Close update dialog if setup proceeded
+    
+    def download_update(self):
+        """Open download URL in browser"""
+        url = self.update_info.get('download_url', self.update_info.get('release_url', ''))
+        if url:
+            webbrowser.open(url)
+        self.accept()
+    
+    def skip_version(self):
+        """Mark this version as skipped"""
+        if self.parent():
+            self.parent().global_settings['skipped_version'] = self.update_info.get('tag_name', self.update_info['latest_version'])
+            self.parent().save_global_settings()
+        self.reject()
+
 
 class TestEnvironment(QDialog):
     def __init__(self):
@@ -419,10 +765,42 @@ class SettingsWindow(QDialog):
         windows_label.setObjectName("settings_label")
         windows_layout.addWidget(windows_label)
         
+        # Update checking
+        updates_section = QLabel("Updates")
+        updates_section.setStyleSheet("color: #ddd; font-weight: bold; padding-top: 15px;")
+        windows_layout.addWidget(updates_section)
+        
+        self.auto_update_check = QCheckBox("Check for updates on startup")
+        self.auto_update_check.setStyleSheet("color: #ddd; padding: 8px;")
+        if self.parent_app:
+            self.auto_update_check.setChecked(self.parent_app.global_settings.get("auto_check_updates", True))
+        windows_layout.addWidget(self.auto_update_check)
+        
+        check_now_btn = QPushButton("Check for Updates Now")
+        check_now_btn.setStyleSheet(
+            "background: #2a2a2a; color: #3ddc84; border: 1px solid #3ddc84; "
+            "padding: 8px 16px; border-radius: 4px; font-weight: bold;"
+        )
+        check_now_btn.clicked.connect(self.check_for_updates)
+        windows_layout.addWidget(check_now_btn)
+        
+        version_label = QLabel(f"Current Version: {VERSION}")
+        version_label.setStyleSheet("color: #888; font-size: 10px; padding: 5px;")
+        windows_layout.addWidget(version_label)
+        
+        update_desc = QLabel("Automatically check for new versions when the application starts.")
+        update_desc.setObjectName("settings_description")
+        update_desc.setWordWrap(True)
+        update_desc.setStyleSheet("color: #aaa; font-size: 11px; margin-top: 10px;")
+        windows_layout.addWidget(update_desc)
+        
+        # Separator
+        windows_layout.addSpacing(15)
+        
         self.minimize_tray_check = QCheckBox("Minimize to system tray on close")
         self.minimize_tray_check.setStyleSheet("color: #ddd; padding: 8px;")
         if self.parent_app:
-            self.minimize_tray_check.setChecked(self.parent_app.global_settings.get("minimize_to_tray", True))
+            self.minimize_tray_check.setChecked(self.parent_app.global_settings.get("minimize_to_tray", False))
         windows_layout.addWidget(self.minimize_tray_check)
         
         windows_desc = QLabel("When enabled, closing the window minimizes the application to the system tray.\nWhen disabled, closing the window exits the application.")
@@ -453,13 +831,23 @@ class SettingsWindow(QDialog):
         
         # Bottom buttons
         btn_row = QHBoxLayout()
+        
+        # Version label on the left (clickable link to releases)
+        version_label = QLabel(f'<a href="https://github.com/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases" style="color: #666; text-decoration: none;">{VERSION}</a>')
+        version_label.setStyleSheet("color: #666; font-size: 10px; padding: 0 10px;")
+        version_label.setOpenExternalLinks(True)
+        version_label.setTextFormat(Qt.TextFormat.RichText)
+        version_label.setToolTip("View releases on GitHub")
+        btn_row.addWidget(version_label)
+        
+        btn_row.addStretch(1)
+        
         apply_btn = QPushButton("Apply")
         apply_btn.setObjectName("settings_apply")
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setObjectName("settings_cancel")
         apply_btn.clicked.connect(self.apply_and_close)
         cancel_btn.clicked.connect(self.reject)
-        btn_row.addStretch(1)
         btn_row.addWidget(cancel_btn)
         btn_row.addWidget(apply_btn)
         
@@ -467,6 +855,36 @@ class SettingsWindow(QDialog):
     
     def switch_tab(self, item):
         self.content_stack.setCurrentIndex(self.tab_list.row(item))
+    
+    def check_for_updates(self):
+        """Check for updates manually"""
+        # Show checking message
+        self.sender().setEnabled(False)
+        self.sender().setText("Checking...")
+        QApplication.processEvents()
+        
+        result = update_checker.check_for_updates(
+            VERSION, GITHUB_REPO_OWNER, GITHUB_REPO_NAME
+        )
+        
+        self.sender().setEnabled(True)
+        self.sender().setText("Check for Updates Now")
+        
+        if not result['success']:
+            QMessageBox.warning(
+                self, "Update Check Failed",
+                f"Could not check for updates:\n{result['error']}"
+            )
+            return
+        
+        if result['has_update']:
+            dlg = UpdateDialog(result, self.parent_app)
+            dlg.exec()
+        else:
+            QMessageBox.information(
+                self, "No Updates",
+                f"You are running the latest version ({VERSION})."
+            )
     
     def apply_and_close(self):
         if self.parent_app:
@@ -488,6 +906,7 @@ class SettingsWindow(QDialog):
             self.parent_app.global_settings["theme"] = new_theme
             self.parent_app.global_settings["minimize_to_tray"] = self.minimize_tray_check.isChecked()
             self.parent_app.global_settings["require_admin"] = new_require_admin
+            self.parent_app.global_settings["auto_check_updates"] = self.auto_update_check.isChecked()
             self.parent_app.save_global_settings()
             self.parent_app.update_speed_label(latency_value)
             
@@ -662,9 +1081,14 @@ class StratagemApp(QMainWindow):
                 idx = self.profile_box.findText(last_profile)
                 if idx >= 0:
                     self.profile_box.setCurrentIndex(idx)
+        
+        # Check for updates on startup if enabled
+        if self.global_settings.get("auto_check_updates", True):
+            QTimer.singleShot(1000, self.check_for_updates_startup)
 
     def initUI(self):
         self.setObjectName("main_window")
+        self.setWindowTitle(f"{APP_NAME} {VERSION}")
         # Apply theme-based stylesheet
         theme_name = self.global_settings.get("theme", "Dark (Default)")
         self.apply_theme(theme_name)
@@ -1159,8 +1583,26 @@ class StratagemApp(QMainWindow):
                 self.speed_slider.setValue(data.get("speed", 20))
                 self.speed_slider.blockSignals(False)
                 mappings = data.get("mappings", {})
+                
+                # Migrate old stratagem names to new names and track if changes were made
+                migrated = False
+                updated_mappings = {}
                 for code, strat in mappings.items():
-                    if code in self.slots: self.slots[code].assign(strat)
+                    if strat in LEGACY_NAME_MAP:
+                        updated_mappings[code] = LEGACY_NAME_MAP[strat]
+                        migrated = True
+                    else:
+                        updated_mappings[code] = strat
+                    
+                    if code in self.slots:
+                        self.slots[code].assign(updated_mappings[code])
+                
+                # If we migrated any names, save the updated profile
+                if migrated:
+                    data["mappings"] = updated_mappings
+                    with open(path, "w") as f:
+                        json.dump(data, f, indent=2)
+            
             self.sync_macro_hook_state()
             self.save_current_state()  # Save the loaded state
 
@@ -1174,7 +1616,7 @@ class StratagemApp(QMainWindow):
             slot = self.slots.get(str(event.scan_code))
             if slot and slot.assigned_stratagem:
                 if getattr(event, 'is_keypad', True):
-                    stratagem_name = get_stratagem_name(slot.assigned_stratagem)
+                    stratagem_name = slot.assigned_stratagem
                     seq = STRATAGEMS.get(stratagem_name)
                     if seq:
                         slot.run_macro(stratagem_name, seq, slot.label_text)
@@ -1194,7 +1636,7 @@ class StratagemApp(QMainWindow):
             ) != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
-        if self.global_settings.get("minimize_to_tray", True):
+        if self.global_settings.get("minimize_to_tray", False):
             self.hide()
             event.ignore()
         else:
@@ -1211,6 +1653,25 @@ class StratagemApp(QMainWindow):
 
     def filter_icons(self, text):
         for w in self.icon_widgets: w.setVisible(text.lower() in w.name.lower())
+    
+    def check_for_updates_startup(self):
+        """Check for updates in background on startup"""
+        result = update_checker.check_for_updates(
+            VERSION, GITHUB_REPO_OWNER, GITHUB_REPO_NAME, timeout=10
+        )
+        
+        if not result['success']:
+            # Silently fail on startup check
+            return
+        
+        if result['has_update']:
+            # Check if this version was skipped
+            skipped_version = self.global_settings.get('skipped_version', '')
+            if skipped_version == result.get('tag_name', result['latest_version']):
+                return  # Don't show dialog for skipped version
+            
+            dlg = UpdateDialog(result, self)
+            dlg.exec()
 
     def get_current_state(self):
         """Get the current state of the profile"""

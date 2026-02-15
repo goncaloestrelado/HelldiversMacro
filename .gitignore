@@ -30,8 +30,8 @@ MANIFEST
 # PyInstaller
 #  - build/ and dist/ are generated output directories
 #  - HelldiversNumpadMacros.spec is auto-generated
-#  - Note: main.spec is tracked (legacy), app.manifest is a source file
 HelldiversNumpadMacros.spec
+main.spec
 build/
 dist/
 
@@ -39,6 +39,16 @@ dist/
 tempCodeRunnerFile.py
 *.tmp
 *.temp
+nul
+
+# Screenshots and images (not part of assets)
+Screenshot_*.png
+v*.png
+
+# Temporary build scripts
+add_defender_exclusion.bat
+build_installer_admin.bat
+build_installer_only.bat
 
 # IDE files
 .vscode/
