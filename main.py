@@ -56,6 +56,10 @@ def is_installed():
     
     return exe_dir.startswith(program_files) or exe_dir.startswith(program_files_x86)
 
+def get_install_type():
+    """Get the current installation type: 'installed' or 'portable'"""
+    return "installed" if is_installed() else "portable"
+
 def get_installer_filename(tag_name):
     """Generate expected installer filename from tag"""
     version = tag_name.lstrip('v').replace('beta', '')
@@ -305,19 +309,31 @@ class SetupDialog(QDialog):
             self.path_input.setText(path)
     
     def start_installation(self):
-        """Download and run installer"""
-        # Find installer asset
+        """Download and run installer/update"""
+        # Find the appropriate asset for current installation type
         download_url = self.update_info.get('download_url')
         assets = self.update_info.get('assets', [])
+        current_install_type = get_install_type()
         
-        # Look for setup executable
-        for asset in assets:
-            name = asset.get('name', '').lower()
-            if 'setup' in name and name.endswith('.exe'):
-                download_url = asset.get('browser_download_url')
-                break
+        # If update checker already provided a download URL, use it
+        # Otherwise, manually select based on install type
+        if not download_url:
+            if current_install_type == "installed":
+                # Look for setup executable
+                for asset in assets:
+                    name = asset.get('name', '').lower()
+                    if 'setup' in name and name.endswith('.exe'):
+                        download_url = asset.get('browser_download_url')
+                        break
+            else:
+                # Look for portable executable
+                for asset in assets:
+                    name = asset.get('name', '').lower()
+                    if 'portable' in name and name.endswith('.exe'):
+                        download_url = asset.get('browser_download_url')
+                        break
         
-        # Fallback to any .exe asset (portable, if no setup present)
+        # Fallback to any .exe asset if specific type not found
         if not download_url:
             for asset in assets:
                 name = asset.get('name', '').lower()
@@ -885,7 +901,8 @@ class SettingsWindow(QDialog):
         QApplication.processEvents()
         
         result = update_checker.check_for_updates(
-            VERSION, GITHUB_REPO_OWNER, GITHUB_REPO_NAME
+            VERSION, GITHUB_REPO_OWNER, GITHUB_REPO_NAME, 
+            install_type=get_install_type()
         )
         
         self.sender().setEnabled(True)
@@ -1813,7 +1830,8 @@ class StratagemApp(QMainWindow):
     def check_for_updates_startup(self):
         """Check for updates in background on startup"""
         result = update_checker.check_for_updates(
-            VERSION, GITHUB_REPO_OWNER, GITHUB_REPO_NAME, timeout=10
+            VERSION, GITHUB_REPO_OWNER, GITHUB_REPO_NAME, 
+            install_type=get_install_type(), timeout=10
         )
         
         if not result['success']:

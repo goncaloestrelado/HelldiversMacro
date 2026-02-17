@@ -70,14 +70,15 @@ REM Read version from version.py as single source of truth
 for /f "tokens=2 delims== " %%A in ('findstr /r /c:"^VERSION[ ]*=" version.py') do set "APP_VERSION=%%~A"
 if "%APP_VERSION%"=="" set "APP_VERSION=unknown"
 echo Detected app version: %APP_VERSION%
-
+REM Rename portable EXE with version
+set "PORTABLE_EXE_OLD=dist\HelldiversNumpadMacros.exe"
+set "PORTABLE_EXE_NEW=dist\HelldiversNumpadMacros-Portable-%APP_VERSION%.exe"
+if exist "%PORTABLE_EXE_OLD%" (
+    ren "%PORTABLE_EXE_OLD%" "HelldiversNumpadMacros-Portable-%APP_VERSION%.exe"
+    echo Renamed portable EXE: %PORTABLE_EXE_NEW%
+)
 REM Sync installer version to match version.py
 powershell -NoProfile -Command "& { $q = [char]34; $content = Get-Content installer.iss; $content = $content -replace '^#define MyAppVersion .*$', ('#define MyAppVersion ' + $q + $env:APP_VERSION + $q); Set-Content installer.iss $content }"
-
-set "ZIP_OUT=dist\zips"
-set "ZIP_PORTABLE_NAME=[%APP_VERSION%][portable]HelldiversNumpadMacros.zip"
-set "ZIP_INSTALLER_NAME=[%APP_VERSION%][installer]HelldiversNumpadMacros.zip"
-if not exist "%ZIP_OUT%" mkdir "%ZIP_OUT%"
 
 REM Check if Inno Setup is installed
 echo.
@@ -104,7 +105,7 @@ set "INNO_TRY=1"
 :inno_retry
 "%INNO_PATH%" "installer.iss"
 
-set "INSTALLER_EXE=dist\installer\HelldiversNumpadMacros-Setup-beta%APP_VERSION%.exe"
+set "INSTALLER_EXE=dist\installer\HelldiversNumpadMacros-Setup-%APP_VERSION%.exe"
 if exist "%INSTALLER_EXE%" goto inno_success
 
 if %INNO_TRY% LSS %INNO_RETRIES% (
@@ -119,55 +120,13 @@ exit /b 1
 
 :inno_success
 
-goto zip_all
-
-:zip_portable
-echo.
-echo [Zip] Creating portable zip...
-powershell -NoProfile -Command "Compress-Archive -Path 'dist\\HelldiversNumpadMacros.exe' -DestinationPath '%ZIP_OUT%\\%ZIP_PORTABLE_NAME%' -Force"
-if errorlevel 1 (
-    echo ERROR: Failed to create portable zip
-    pause < con
-    exit /b 1
-)
-goto zip_done
-
-:zip_all
-echo.
-echo [Zip] Creating portable zip...
-powershell -NoProfile -Command "Compress-Archive -Path 'dist\\HelldiversNumpadMacros.exe' -DestinationPath '%ZIP_OUT%\\%ZIP_PORTABLE_NAME%' -Force"
-if errorlevel 1 (
-    echo ERROR: Failed to create portable zip
-    pause < con
-    exit /b 1
-)
-
-set "INSTALLER_EXE=dist\installer\HelldiversNumpadMacros-Setup-beta%APP_VERSION%.exe"
-if exist "%INSTALLER_EXE%" (
-    echo.
-    echo [Zip] Creating installer zip...
-    powershell -NoProfile -Command "Compress-Archive -Path '%INSTALLER_EXE%' -DestinationPath '%ZIP_OUT%\\%ZIP_INSTALLER_NAME%' -Force"
-    if errorlevel 1 (
-        echo ERROR: Failed to create installer zip
-        pause < con
-        exit /b 1
-    )
-) else (
-    echo.
-    echo WARNING: Installer EXE not found at %INSTALLER_EXE%
-)
-
-:zip_done
-
 echo.
 echo ============================================
 echo Build Complete!
 echo ============================================
 echo.
-echo Standalone EXE: dist\HelldiversNumpadMacros.exe
-echo Installer: dist\installer\HelldiversNumpadMacros-Setup-beta%APP_VERSION%.exe
-echo Portable zip: %ZIP_OUT%\%ZIP_PORTABLE_NAME%
-echo Installer zip: %ZIP_OUT%\%ZIP_INSTALLER_NAME%
+echo Portable EXE: dist\HelldiversNumpadMacros-Portable-%APP_VERSION%.exe
+echo Installer EXE: dist\installer\HelldiversNumpadMacros-Setup-%APP_VERSION%.exe
 echo.
 echo.
 echo Build log saved to %LOG_FILE%

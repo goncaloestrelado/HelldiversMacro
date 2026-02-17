@@ -51,7 +51,7 @@ def compare_versions(current, latest):
             return -1
 
 
-def check_for_updates(current_version, repo_owner, repo_name, timeout=5):
+def check_for_updates(current_version, repo_owner, repo_name, install_type="portable", timeout=5):
     """
     Check GitHub for the latest release
     
@@ -59,6 +59,7 @@ def check_for_updates(current_version, repo_owner, repo_name, timeout=5):
         current_version: Current app version (e.g., "1.0.0")
         repo_owner: GitHub repository owner
         repo_name: GitHub repository name
+        install_type: "portable" or "installed" to filter appropriate assets
         timeout: Request timeout in seconds
     
     Returns:
@@ -89,18 +90,26 @@ def check_for_updates(current_version, repo_owner, repo_name, timeout=5):
         release_notes = data.get('body', 'No release notes available.')
         release_url = data.get('html_url', '')
         
-        # Find installer asset (prefer setup executable)
+        # Find installer asset based on install type
         download_url = None
         assets = data.get('assets', [])
         
-        # Look for setup executable first
-        for asset in assets:
-            name = asset.get('name', '').lower()
-            if 'setup' in name and name.endswith('.exe'):
-                download_url = asset.get('browser_download_url')
-                break
+        if install_type == "installed":
+            # Look for setup installer (x64 version)
+            for asset in assets:
+                name = asset.get('name', '').lower()
+                if 'setup' in name and name.endswith('.exe'):
+                    download_url = asset.get('browser_download_url')
+                    break
+        else:
+            # Look for portable version
+            for asset in assets:
+                name = asset.get('name', '').lower()
+                if 'portable' in name and name.endswith('.exe'):
+                    download_url = asset.get('browser_download_url')
+                    break
         
-        # Fallback to any .exe file
+        # Fallback: if specific type not found, look for any .exe
         if not download_url:
             for asset in assets:
                 name = asset.get('name', '').lower()
