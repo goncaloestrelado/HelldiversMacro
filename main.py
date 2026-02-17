@@ -11,7 +11,20 @@ from stratagem_data import STRATAGEMS, STRATAGEMS_BY_DEPARTMENT
 from version import VERSION, APP_NAME, GITHUB_REPO_OWNER, GITHUB_REPO_NAME
 import update_checker
 
-PROFILES_DIR = "profiles"
+# Get app data directory (Windows: %APPDATA%\HelldiversNumpadMacros)
+def get_app_data_dir():
+    """Get the application data directory"""
+    appdata = os.environ.get('APPDATA')
+    if appdata:
+        app_dir = os.path.join(appdata, "HelldiversNumpadMacros")
+        os.makedirs(app_dir, exist_ok=True)
+        return app_dir
+    else:
+        # Fallback for systems without APPDATA (shouldn't happen on Windows)
+        return "profiles"
+
+PROFILES_DIR = os.path.join(get_app_data_dir(), "profiles")
+SETTINGS_FILE = os.path.join(get_app_data_dir(), "general.json")
 ASSETS_DIR = "assets"
 
 if not os.path.exists(PROFILES_DIR):
@@ -1500,7 +1513,7 @@ class StratagemApp(QMainWindow):
         return mapping.get(direction, direction)
     
     def load_global_settings(self):
-        """Load global settings from general.json"""
+        """Load global settings from SETTINGS_FILE"""
         default_settings = {
             "latency": 20,
             "macros_enabled": False,
@@ -1509,8 +1522,8 @@ class StratagemApp(QMainWindow):
             "sound_enabled": False,
         }
         try:
-            if os.path.exists("general.json"):
-                with open("general.json", "r") as f:
+            if os.path.exists(SETTINGS_FILE):
+                with open(SETTINGS_FILE, "r") as f:
                     self.global_settings = json.load(f)
             else:
                 self.global_settings = default_settings.copy()
@@ -1535,9 +1548,9 @@ class StratagemApp(QMainWindow):
             self.save_global_settings()
 
     def save_global_settings(self):
-        """Save global settings to general.json"""
+        """Save global settings to SETTINGS_FILE"""
         try:
-            with open("general.json", "w") as f:
+            with open(SETTINGS_FILE, "w") as f:
                 json.dump(self.global_settings, f, indent=2)
         except Exception:
             pass
@@ -1891,16 +1904,16 @@ if __name__ == '__main__':
         "require_admin": False,
         "sound_enabled": False,
     }
-    if not os.path.exists("general.json"):
+    if not os.path.exists(SETTINGS_FILE):
         try:
-            with open("general.json", "w") as f:
+            with open(SETTINGS_FILE, "w") as f:
                 json.dump(default_settings, f, indent=2)
         except Exception:
             pass
     require_admin = False
     try:
-        if os.path.exists("general.json"):
-            with open("general.json", "r") as f:
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, "r") as f:
                 settings = json.load(f)
                 require_admin = settings.get("require_admin", False)
     except:
