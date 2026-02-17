@@ -1319,7 +1319,13 @@ class StratagemApp(QMainWindow):
         grid.addWidget(slot, 4, 2)
         self.slots['83'] = slot
 
-        content.addWidget(side_container); content.addLayout(grid); main_vbox.addLayout(content)
+        # Create a widget container for the grid with fixed dimensions
+        grid_container = QWidget()
+        grid_container.setLayout(grid)
+        grid_container.setFixedSize(396, 498)  # 4 cols × 90px + 3 gaps × 12px = 396; 5 rows × 90px + 4 gaps × 12px = 498
+        grid_container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+        content.addWidget(side_container); content.addWidget(grid_container); main_vbox.addLayout(content)
 
         # Bottom bar with macro toggle
         bottom_bar = QWidget()
