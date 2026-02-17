@@ -1,4 +1,4 @@
-import sys, json, keyboard, time, os, winsound, re, ctypes, webbrowser, tempfile, subprocess
+import sys, json, keyboard, time, os, winsound, re, ctypes, webbrowser, tempfile, subprocess, shutil
 from urllib.request import urlopen, Request
 from PyQt6.QtWidgets import (QApplication, QWidget, QGridLayout, QLabel, 
                              QHBoxLayout, QVBoxLayout, QScrollArea, QLineEdit, 
@@ -23,12 +23,43 @@ def get_app_data_dir():
         # Fallback for systems without APPDATA (shouldn't happen on Windows)
         return "profiles"
 
+def migrate_old_files():
+    """Migrate old profile and settings files from app directory to AppData"""
+    new_app_data_dir = get_app_data_dir()
+    old_profiles_dir = "profiles"
+    old_settings_file = "general.json"
+    
+    # Migrate old profiles directory
+    if os.path.exists(old_profiles_dir) and old_profiles_dir != os.path.join(new_app_data_dir, "profiles"):
+        try:
+            new_profiles_dir = os.path.join(new_app_data_dir, "profiles")
+            # Only migrate if new location doesn't already have profiles
+            if not os.path.exists(new_profiles_dir):
+                shutil.copytree(old_profiles_dir, new_profiles_dir)
+            print(f"[Migration] Profiles migrated from {old_profiles_dir} to {new_profiles_dir}")
+        except Exception as e:
+            print(f"[Migration] Warning: Could not migrate profiles directory: {e}")
+    
+    # Migrate old settings file
+    if os.path.exists(old_settings_file):
+        try:
+            new_settings_file = os.path.join(new_app_data_dir, "general.json")
+            # Only migrate if new location doesn't already have settings
+            if not os.path.exists(new_settings_file):
+                shutil.copy2(old_settings_file, new_settings_file)
+            print(f"[Migration] Settings migrated from {old_settings_file} to {new_settings_file}")
+        except Exception as e:
+            print(f"[Migration] Warning: Could not migrate settings file: {e}")
+
 PROFILES_DIR = os.path.join(get_app_data_dir(), "profiles")
 SETTINGS_FILE = os.path.join(get_app_data_dir(), "general.json")
 ASSETS_DIR = "assets"
 
 if not os.path.exists(PROFILES_DIR):
     os.makedirs(PROFILES_DIR)
+
+# Migrate old files from app directory to AppData on first run
+migrate_old_files()
 
 # Theme file mappings
 THEME_FILES = {
