@@ -2,7 +2,7 @@
 ; https://jrsoftware.org/isinfo.php
 
 #define MyAppName "Helldivers Numpad Macros"
-#define MyAppVersion "0.1.9.1"
+#define MyAppVersion "0.1.10"
 #define MyAppPublisher "Goncalo Estrelado"
 #define MyAppURL "https://github.com/goncaloestrelado/HelldiversMacro"
 #define MyAppExeName "HelldiversNumpadMacros.exe"
