@@ -4,7 +4,8 @@ This is a software to assign Stratagem codes as macros to numpad keys.
 Drag and drop from the list to the key slots.
 Instantly call Stratagems with 1 press.
 
-<img width="742" height="821" alt="Screenshot_1" src="https://github.com/user-attachments/assets/44b96b10-0ba9-4fce-93e0-4b93cace1abd" />
+<img width="815" height="928" alt="Screenshot_1" src="https://github.com/user-attachments/assets/cf342053-ed5d-429d-9430-7c556f1718fb" />
+
 
 ### Note: Be sure to not have numpad keys binded in-game.
 
