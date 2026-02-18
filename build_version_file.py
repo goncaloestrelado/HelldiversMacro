@@ -26,46 +26,28 @@ version_file_content = f'''# UTF-8
 # http://msdn.microsoft.com/en-us/library/ms646997.aspx
 VSVersionInfo(
   ffi=FixedFileInfo(
-    # Contains as sequence of up to four items: (1, 2, 3, 4)
-    # Set not needed items to zero 0.
     mask=0x3f,
     mask_eq=0x3f,
-    # Contains a bitmask that specifies the valid bits 'flags'r
     reserved=0x0,
-    # Contains a bitmask that specifies the Boolean attributes of the file.
-    strFileInfo=(
-      # Contains a list of StringFileInfo blocks, each describing a language/codepage
-      # combination.
-      ('040904B0',
-        [('CompanyName', 'HelldiversMacro'),
-        ('FileDescription', 'Helldivers 2 Stratagem Macro Tool'),
-        ('FileVersion', '{version_string}'),
-        ('InternalName', 'HelldiversNumpadMacros'),
-        ('LegalCopyright', ''),
-        ('OriginalFilename', 'HelldiversNumpadMacros.exe'),
-        ('ProductName', 'Helldivers Numpad Macros'),
-        ('ProductVersion', '{version_string}')])
-    ),
-    VarFileInfo=[('Translation', [1033, 1200])]
+    flag=0x0,
+    file_version=({version_tuple}),
+    prod_version=({version_tuple}),
   ),
-  ffi=FixedFileInfo(
-        # Contains as sequence of up to four items: (1, 2, 3, 4)
-        # Set not needed items to zero 0.
-        mask=0x3f,
-        mask_eq=0x3f,
-        # Contains a bitmask that specifies the valid bits 'flags'r
-        reserved=0x0,
-        # Contains a bitmask that specifies the Boolean attributes of the file.
-        flag=0x0,
-        # Contains a version number as a sequence of four items: major, minor, patch, build
-        file_version=({version_tuple}),
-        # Contains a version number as a sequence of four items: major, minor, patch, build
-        prod_version=({version_tuple}),
-        # Contains a bitmask that specifies the valid bits 'flags'r
-        mask=0x3f,
-        # Contains a bitmask that specifies the Boolean attributes of the file.
-        mask_eq=0x3f,
-  ),
+  kids=[
+    StringFileInfo(
+      [StringTable(
+        u'040904B0',
+        [StringStruct(u'CompanyName', u'HelldiversMacro'),
+        StringStruct(u'FileDescription', u'Helldivers 2 Stratagem Macro Tool'),
+        StringStruct(u'FileVersion', u'{version_string}'),
+        StringStruct(u'InternalName', u'HelldiversNumpadMacros'),
+        StringStruct(u'LegalCopyright', u''),
+        StringStruct(u'OriginalFilename', u'HelldiversNumpadMacros.exe'),
+        StringStruct(u'ProductName', u'Helldivers Numpad Macros'),
+        StringStruct(u'ProductVersion', u'{version_string}')])
+      ]),
+    VarFileInfo([VarFileEntry(u'Translation', [1033, 1200])])
+  ]
 )
 '''
 
