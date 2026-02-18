@@ -3,14 +3,12 @@ Constants for Helldivers Numpad Macros
 Central location for all application constants
 """
 
-# Theme file mappings
 THEME_FILES = {
     "Dark (Default)": "theme_dark_default.qss",
     "Dark with Blue Accent": "theme_dark_blue.qss",
     "Dark with Red Accent": "theme_dark_red.qss",
 }
 
-# Default settings
 DEFAULT_SETTINGS = {
     "latency": 20,
     "macros_enabled": False,
@@ -24,7 +22,6 @@ DEFAULT_SETTINGS = {
     "theme": "Dark (Default)",
 }
 
-# Numpad layout configuration: (scan_code, label, row, col, rowspan, colspan)
 NUMPAD_LAYOUT = [
     ('53', '/', 0, 1, 1, 1),
     ('55', '*', 0, 2, 1, 1),
@@ -44,17 +41,14 @@ NUMPAD_LAYOUT = [
     ('83', '.', 4, 2, 1, 1),
 ]
 
-# Grid dimensions
-NUMPAD_GRID_WIDTH = 396  # 4 cols × 90px + 3 gaps × 12px
-NUMPAD_GRID_HEIGHT = 498  # 5 rows × 90px + 4 gaps × 12px
+NUMPAD_GRID_WIDTH = 396
+NUMPAD_GRID_HEIGHT = 498
 NUMPAD_GRID_SPACING = 12
 
-# Icon list settings
 ICON_SIZE = 80
 ICON_SPACING = 8
 HEADER_HEIGHT = 32
 
-# Search bar settings
 SEARCH_HEIGHT = 32
 
 # Department header style
@@ -70,7 +64,6 @@ DEPARTMENT_HEADER_STYLE = """
     }
 """
 
-# Key binding mappings
 KEYBIND_MAPPINGS = {
     "arrows": {
         "up": "up",
@@ -86,7 +79,6 @@ KEYBIND_MAPPINGS = {
     }
 }
 
-# Arrow display icons for test environment
 ARROW_ICONS = {
     "up": "↑",
     "down": "↓",

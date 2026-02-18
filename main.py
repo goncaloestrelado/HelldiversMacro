@@ -1,8 +1,3 @@
-"""
-Helldivers 2 Numpad Commander - Main Application
-Refactored for better modularity and maintainability
-"""
-
 import sys
 import os
 import ctypes
@@ -14,7 +9,6 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QGridLayout, QL
 from PyQt6.QtCore import Qt, QTimer, QEvent, QSize
 from PyQt6.QtGui import QIcon
 
-# Import from our modular structure
 from config import (PROFILES_DIR, ASSETS_DIR, get_theme_stylesheet, load_settings, 
                    save_settings)
 from constants import NUMPAD_LAYOUT, DEPARTMENT_HEADER_STYLE
@@ -36,11 +30,10 @@ class StratagemApp(QMainWindow):
         self.slots = {}
         self.setWindowTitle(f"{APP_NAME} - Numpad Commander")
         self.global_settings = load_settings()
-        self.saved_state = None  # Track the last saved state
-        self.undo_btn = None  # Will be set in initUI
+        self.saved_state = None
+        self.undo_btn = None
         self.save_btn = None
         
-        # Initialize macro engine
         self.macro_engine = MacroEngine(
             lambda: self.slots,
             lambda: self.global_settings,
@@ -50,7 +43,6 @@ class StratagemApp(QMainWindow):
         self.initUI()
         self.refresh_profiles()
         
-        # Initialize tray manager
         self.tray_manager = TrayManager(
             self.app_icon if hasattr(self, 'app_icon') and self.app_icon else None
         )
@@ -59,10 +51,8 @@ class StratagemApp(QMainWindow):
         self.tray_manager.quit_app.connect(self.quit_application)
         self.tray_manager.setup()
         
-        # Autoload profile if enabled
         self._autoload_last_profile()
         
-        # Check for updates on startup if enabled
         if self.global_settings.get("auto_check_updates", True):
             QTimer.singleShot(1000, self.check_for_updates_startup)
 
@@ -75,17 +65,14 @@ class StratagemApp(QMainWindow):
         theme_name = self.global_settings.get("theme", "Dark (Default)")
         self.apply_theme(theme_name)
         
-        # Load icon
         self._load_app_icon()
         
-        # Create central widget
         central_widget = QWidget()
         main_vbox = QVBoxLayout(central_widget)
         main_vbox.setContentsMargins(0, 0, 0, 0)
         main_vbox.setSpacing(0)
         self.setCentralWidget(central_widget)
         
-        # Build UI components
         self._create_top_bar(main_vbox)
         self._create_status_label(main_vbox)
         self._create_main_content(main_vbox)
@@ -113,7 +100,6 @@ class StratagemApp(QMainWindow):
         top_bar_layout.setContentsMargins(8, 6, 8, 6)
         top_bar_layout.setSpacing(8)
         
-        # Left sidebar: Settings and Latency
         left_sidebar = QVBoxLayout()
         left_sidebar.setContentsMargins(8, 8, 0, 8)
         
@@ -127,7 +113,6 @@ class StratagemApp(QMainWindow):
         self.speed_btn.setObjectName("speed_btn")
         self.speed_btn.clicked.connect(self.open_settings)
         
-        # Hidden slider for internal tracking
         self.speed_slider = QSlider(Qt.Orientation.Horizontal)
         self.speed_slider.setObjectName("speed_slider")
         self.speed_slider.setRange(1, 200)
@@ -139,7 +124,6 @@ class StratagemApp(QMainWindow):
         left_sidebar.addWidget(self.speed_btn)
         top_bar_layout.addLayout(left_sidebar)
         
-        # Right sidebar: Profile and actions
         right_sidebar = QVBoxLayout()
         right_sidebar.setContentsMargins(0, 8, 8, 8)
         
@@ -148,7 +132,6 @@ class StratagemApp(QMainWindow):
         self.profile_box.currentIndexChanged.connect(self.profile_changed)
         right_sidebar.addWidget(self.profile_box)
         
-        # Action buttons
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(6)
         
@@ -207,7 +190,6 @@ class StratagemApp(QMainWindow):
         side.setContentsMargins(0, 0, 0, 0)
         side_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
-        # Search bar
         self.search = QLineEdit()
         self.search.setObjectName("search_input")
         self.search.setPlaceholderText("Search...")
@@ -216,7 +198,6 @@ class StratagemApp(QMainWindow):
         self.search.textChanged.connect(self.filter_icons)
         self.search.textChanged.connect(self.update_search_clear_visibility)
         
-        # Search clear button
         self.search_clear_btn = QToolButton(self.search)
         self.search_clear_btn.setObjectName("search_clear_btn")
         self.search_clear_btn.setText("x")
@@ -230,7 +211,6 @@ class StratagemApp(QMainWindow):
         self.update_search_clear_visibility(self.search.text())
         side.addWidget(self.search)
         
-        # Icon list
         self.icon_list = QListWidget()
         self.icon_list.setObjectName("icon_list")
         self.icon_list.setViewMode(QListWidget.ViewMode.IconMode)
@@ -248,7 +228,6 @@ class StratagemApp(QMainWindow):
         self.icon_items = []
         self.header_items = []
         
-        # Populate icon list by department
         self._populate_icon_list()
         
         side.addWidget(self.icon_list)
@@ -259,7 +238,6 @@ class StratagemApp(QMainWindow):
     def _populate_icon_list(self):
         """Populate the icon list with stratagems organized by department"""
         for department, stratagems in STRATAGEMS_BY_DEPARTMENT.items():
-            # Create department header
             header_item = QListWidgetItem()
             header_container = QWidget()
             header_layout = QVBoxLayout(header_container)
@@ -277,7 +255,6 @@ class StratagemApp(QMainWindow):
             self.icon_list.setItemWidget(header_item, header_container)
             self.header_items.append(header_item)
             
-            # Add stratagem icons for this department
             for name in sorted(stratagems.keys()):
                 w = DraggableIcon(name)
                 item = QListWidgetItem()
@@ -292,13 +269,11 @@ class StratagemApp(QMainWindow):
         grid = QGridLayout()
         grid.setSpacing(12)
         
-        # Use numpad layout from constants
         for scan_code, label, row, col, rowspan, colspan in NUMPAD_LAYOUT:
             slot = NumpadSlot(scan_code, label, self)
             grid.addWidget(slot, row, col, rowspan, colspan)
             self.slots[scan_code] = slot
         
-        # Container for grid with fixed dimensions
         grid_container = QWidget()
         grid_container.setLayout(grid)
         grid_container.setFixedSize(396, 498)
@@ -325,15 +300,6 @@ class StratagemApp(QMainWindow):
         bottom_bar_layout.addWidget(self.macros_toggle)
         
         main_layout.addWidget(bottom_bar)
-
-    def _autoload_last_profile(self):
-        """Autoload the last used profile if enabled"""
-        if self.global_settings.get("autoload_profile", False):
-            last_profile = self.global_settings.get("last_profile", None)
-            if last_profile and last_profile != "Create new profile":
-                idx = self.profile_box.findText(last_profile)
-                if idx >= 0:
-                    self.profile_box.setCurrentIndex(idx)
 
     # Event handlers
     def resizeEvent(self, event):
@@ -595,7 +561,6 @@ class StratagemApp(QMainWindow):
         self.show_status("Changes undone")
         self.update_undo_state()
 
-    # Filtering
     def filter_icons(self, text):
         """Filter stratagem icons based on search text"""
         text_lower = text.lower()
@@ -688,7 +653,7 @@ class StratagemApp(QMainWindow):
         
         if keybind_mode == "wasd":
             mapping = {"up": "w", "down": "s", "left": "a", "right": "d"}
-        else:  # arrows (default)
+        else:
             mapping = {"up": "up", "down": "down", "left": "left", "right": "right"}
         
         return mapping.get(direction, direction)
@@ -712,8 +677,7 @@ class StratagemApp(QMainWindow):
         """Quit the application"""
         self.macro_engine.disable()
         QApplication.quit()
-
-    # Update checking
+    
     def check_for_updates_startup(self):
         """Check for updates on startup"""
         check_for_updates_startup(self, self.global_settings)
@@ -723,19 +687,17 @@ def main():
     """Main application entry point"""
     from config import is_admin, run_as_admin
     
-    # Load settings to check admin requirement
     settings = load_settings()
     require_admin = settings.get("require_admin", False)
     
-    # If admin is required but not running as admin, request elevation
     if require_admin and not is_admin():
         reply = ctypes.windll.user32.MessageBoxW(
             None,
             "This application is configured to require administrator privileges.\nRestart with administrator privileges?",
             "Administrator Privileges Required",
-            0x00000004 | 0x00000020,  # MB_YESNO | MB_ICONQUESTION
+            0x00000004 | 0x00000020,
         )
-        if reply == 6:  # IDYES
+        if reply == 6:
             if run_as_admin():
                 sys.exit(0)
             else:
@@ -743,10 +705,9 @@ def main():
                     None,
                     "Failed to elevate privileges. Continuing without admin rights.",
                     "Error",
-                    0x00000000 | 0x00000010,  # MB_OK | MB_ICONERROR
+                    0x00000000 | 0x00000010,
                 )
     
-    # Continue with normal startup
     app = QApplication(sys.argv)
     ex = StratagemApp()
     ex.show()

@@ -1,6 +1,3 @@
-# stratagem_data.py
-
-# Organized by department for better UI display
 STRATAGEMS_BY_DEPARTMENT = {
     "Patriotic Administration Center": {
         "MG-43 Machine Gun": ["down", "left", "down", "up", "right"],
@@ -120,7 +117,6 @@ STRATAGEMS_BY_DEPARTMENT = {
     },
 }
 
-# Flat dictionary for backward compatibility
 STRATAGEMS = {}
 for department, stratagems in STRATAGEMS_BY_DEPARTMENT.items():
     STRATAGEMS.update(stratagems)

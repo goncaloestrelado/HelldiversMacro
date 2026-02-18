@@ -8,7 +8,6 @@ All components have been moved to:
 Import from those modules directly in new code.
 """
 
-# Re-export from new modules for backwards compatibility
 from dialogs import TestEnvironment, SettingsDialog, SettingsWindow
 from widgets import Comm, DraggableIcon, NumpadSlot, comm
 

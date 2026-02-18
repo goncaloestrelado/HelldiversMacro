@@ -55,7 +55,7 @@ class TestEnvironment(QDialog):
 
 
 class SettingsDialog(QDialog):
-    """Simple latency settings dialog (legacy)"""
+    """Simple latency settings dialog"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -76,7 +76,6 @@ class SettingsDialog(QDialog):
         self.spin = QSpinBox()
         self.spin.setRange(1, 200)
         
-        # Initialize from parent if available
         val = self.parent_app.speed_slider.value() if self.parent_app else 20
         self.slider.setValue(val)
         self.spin.setValue(val)
@@ -140,11 +139,9 @@ class SettingsWindow(QDialog):
         self.tab_list.itemClicked.connect(self.switch_tab)
         content_layout.addWidget(self.tab_list)
         
-        # Right content area
         self.content_stack = QStackedWidget()
         self.content_stack.setObjectName("settings_content")
         
-        # Create all tabs
         self._create_latency_tab()
         self._create_controls_tab()
         self._create_autoload_tab()

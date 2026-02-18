@@ -10,9 +10,9 @@ from PyQt6.QtCore import QObject, pyqtSignal
 class TrayManager(QObject):
     """Manages system tray icon and menu"""
     
-    toggle_macros = pyqtSignal(bool)  # Emitted when user toggles macros from tray
-    show_window = pyqtSignal()  # Emitted when user wants to show window
-    quit_app = pyqtSignal()  # Emitted when user wants to quit
+    toggle_macros = pyqtSignal(bool)
+    show_window = pyqtSignal()
+    quit_app = pyqtSignal()
     
     def __init__(self, app_icon=None, parent=None):
         super().__init__(parent)
@@ -24,11 +24,9 @@ class TrayManager(QObject):
         """Setup system tray icon and menu"""
         self.tray_icon = QSystemTrayIcon(self.parent())
         
-        # Set icon
         if self.app_icon:
             self.tray_icon.setIcon(self.app_icon)
         
-        # Create menu
         tray_menu = QMenu()
         
         self.tray_toggle_action = tray_menu.addAction("Enable Macros")

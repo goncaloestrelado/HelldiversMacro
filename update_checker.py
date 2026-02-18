@@ -19,7 +19,6 @@ def extract_version(tag_or_version):
         "v0.1.6-beta" -> "0.1.6"
         "release-1.2.3" -> "1.2.3"
     """
-    # Match semantic version pattern (X.Y.Z with optional pre-release info)
     match = re.search(r'(\d+\.\d+\.\d+)', tag_or_version)
     if match:
         return match.group(1)
@@ -42,7 +41,6 @@ def compare_versions(current, latest):
         else:
             return -1
     except Exception:
-        # Fallback to string comparison if parsing fails
         if latest > current:
             return 1
         elif latest == current:

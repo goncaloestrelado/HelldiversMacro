@@ -14,7 +14,6 @@ import keyboard
 from config import find_svg_path
 
 
-# Signal communicator for macro test display
 class Comm(QObject):
     update_test_display = pyqtSignal(str, list, str)
 
@@ -125,7 +124,6 @@ class NumpadSlot(QWidget):
         source_slot_code = event.mimeData().data("source_slot").data().decode()
 
         if source_slot_code:
-            # Swapping with another slot
             source_slot = self.parent_app.slots.get(source_slot_code)
             if source_slot and source_slot != self:
                 existing_strat = self.assigned_stratagem
@@ -135,7 +133,6 @@ class NumpadSlot(QWidget):
                     source_slot.clear_slot()
                 self.assign(incoming_strat)
         else:
-            # Dropping from sidebar (overwrite)
             self.assign(incoming_strat)
         
         event.accept()
@@ -171,10 +168,9 @@ class NumpadSlot(QWidget):
             keyboard.release(actual_key)
             time.sleep(delay)
         
-        # Add notifications after macro executes
         if self.parent_app.global_settings.get("sound_enabled", True):
             try:
-                winsound.Beep(1000, 200)  # 1000Hz for 200ms
+                winsound.Beep(1000, 200)
             except:
                 pass
         

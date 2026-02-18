@@ -10,11 +10,9 @@ import json
 import ctypes
 import re
 
-# Import centralized constants
 from constants import THEME_FILES, DEFAULT_SETTINGS
 
 
-# Application directories and paths
 def get_app_data_dir():
     r"""Get the application data directory (Windows: %APPDATA%\HelldiversNumpadMacros)"""
     appdata = os.environ.get('APPDATA')
@@ -32,22 +30,19 @@ def migrate_old_files():
     old_profiles_dir = "profiles"
     old_settings_file = "general.json"
     
-    # Migrate old profiles directory
+
     if os.path.exists(old_profiles_dir) and old_profiles_dir != os.path.join(new_app_data_dir, "profiles"):
         try:
             new_profiles_dir = os.path.join(new_app_data_dir, "profiles")
-            # Only migrate if new location doesn't already have profiles
             if not os.path.exists(new_profiles_dir):
                 shutil.copytree(old_profiles_dir, new_profiles_dir)
                 print(f"[Migration] Profiles migrated from {old_profiles_dir} to {new_profiles_dir}")
         except Exception as e:
             print(f"[Migration] Warning: Could not migrate profiles directory: {e}")
     
-    # Migrate old settings file
     if os.path.exists(old_settings_file):
         try:
             new_settings_file = os.path.join(new_app_data_dir, "general.json")
-            # Only migrate if new location doesn't already have settings
             if not os.path.exists(new_settings_file):
                 shutil.copy2(old_settings_file, new_settings_file)
                 print(f"[Migration] Settings migrated from {old_settings_file} to {new_settings_file}")
@@ -55,19 +50,14 @@ def migrate_old_files():
             print(f"[Migration] Warning: Could not migrate settings file: {e}")
 
 
-# Initialize paths
 PROFILES_DIR = os.path.join(get_app_data_dir(), "profiles")
 SETTINGS_FILE = os.path.join(get_app_data_dir(), "general.json")
 ASSETS_DIR = "assets"
 
-# Create profiles directory if it doesn't exist
 os.makedirs(PROFILES_DIR, exist_ok=True)
-
-# Migrate old files on first run
 migrate_old_files()
 
 
-# Utility functions
 def normalize(name):
     """Normalize name for comparison (remove spaces, special characters, lowercase)"""
     return name.lower().replace(" ", "").replace("_", "").replace("-", "").replace("/", "").replace('"', "")

@@ -22,9 +22,9 @@ from version import VERSION, APP_NAME, GITHUB_REPO_OWNER, GITHUB_REPO_NAME
 
 class DownloadThread(QThread):
     """Thread for downloading installer"""
-    progress = pyqtSignal(int, int)  # downloaded, total
-    finished = pyqtSignal(str)  # file path
-    error = pyqtSignal(str)  # error message
+    progress = pyqtSignal(int, int)
+    finished = pyqtSignal(str)
+    error = pyqtSignal(str)
     
     def __init__(self, url, filename):
         super().__init__()
@@ -78,7 +78,6 @@ class SetupDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
         
-        # Title
         if self.is_app_installed:
             title_text = f"Update to {update_info.get('tag_name', update_info['latest_version'])}"
             desc_text = "The installer will be downloaded and launched to update your installation."

@@ -38,7 +38,6 @@ class ProfileManager:
             with open(filepath, "r") as f:
                 data = json.load(f)
                 
-            # Migrate old stratagem names to new names
             mappings = data.get("mappings", {})
             migrated = False
             updated_mappings = {}
@@ -50,7 +49,6 @@ class ProfileManager:
                 else:
                     updated_mappings[code] = strat
             
-            # Save migrated profile if changes were made
             if migrated:
                 data["mappings"] = updated_mappings
                 ProfileManager.save_profile(profile_name, data)
