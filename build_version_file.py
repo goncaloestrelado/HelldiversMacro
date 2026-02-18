@@ -26,12 +26,10 @@ version_file_content = f'''# UTF-8
 # http://msdn.microsoft.com/en-us/library/ms646997.aspx
 VSVersionInfo(
   ffi=FixedFileInfo(
+    filevers=({version_tuple}),
+    prodvers=({version_tuple}),
     mask=0x3f,
-    mask_eq=0x3f,
-    reserved=0x0,
-    flag=0x0,
-    file_version=({version_tuple}),
-    prod_version=({version_tuple}),
+    flags=0x0,
   ),
   kids=[
     StringFileInfo(
@@ -46,7 +44,7 @@ VSVersionInfo(
         StringStruct(u'ProductName', u'Helldivers Numpad Macros'),
         StringStruct(u'ProductVersion', u'{version_string}')])
       ]),
-    VarFileInfo([VarFileEntry(u'Translation', [1033, 1200])])
+    VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
   ]
 )
 '''
