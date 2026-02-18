@@ -4,9 +4,9 @@ Central location for all application constants
 """
 
 THEME_FILES = {
-    "Dark (Default)": "theme_dark_default.qss",
-    "Dark with Blue Accent": "theme_dark_blue.qss",
-    "Dark with Red Accent": "theme_dark_red.qss",
+    "Dark (Default)": "src/ui/theme_dark_default.qss",
+    "Dark with Blue Accent": "src/ui/theme_dark_blue.qss",
+    "Dark with Red Accent": "src/ui/theme_dark_red.qss",
 }
 
 DEFAULT_SETTINGS = {
