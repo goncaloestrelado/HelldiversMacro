@@ -62,29 +62,39 @@ Name: "{commonstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: 
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
+// Automatically kill the running app process
+procedure KillRunningProcess();
+var
+  ResultCode: Integer;
+begin
+  // Use taskkill to force-terminate the application
+  ShellExec('open', 'taskkill.exe', '/F /IM HelldiversNumpadMacros.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
 // Check if app is running and close it before installation
 function InitializeSetup(): Boolean;
 var
-  AppRunning: Boolean;
+  RetryCount: Integer;
 begin
   Result := True;
-  AppRunning := True;
+  RetryCount := 0;
   
-  // Check if the app is running
-  while AppRunning and (FindWindowByWindowName('Helldivers 2 - Numpad Commander') <> 0) do
+  // Check if the app is running and kill it
+  while (FindWindowByWindowName('Helldivers 2 - Numpad Commander') <> 0) and (RetryCount < 3) do
   begin
-    if MsgBox('Helldivers Numpad Macros is currently running. Please close it to continue installation.' + #13#10 + #13#10 + 
-              'Click OK after closing the application, or Cancel to exit setup.', 
-              mbConfirmation, MB_OKCANCEL) = IDOK then
+    if RetryCount = 0 then
     begin
-      // Give user time to close
-      Sleep(1000);
-    end
-    else
-    begin
-      Result := False;
-      AppRunning := False;
+      MsgBox('Helldivers Numpad Macros is currently running.' + #13#10 + #13#10 + 
+             'Setup will automatically close it to continue installation.', 
+             mbInformation, MB_OK);
     end;
+    
+    // Kill the process
+    KillRunningProcess();
+    
+    // Give the process time to terminate
+    Sleep(1500);
+    RetryCount := RetryCount + 1;
   end;
 end;
 
