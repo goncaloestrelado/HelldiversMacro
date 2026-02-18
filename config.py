@@ -10,6 +10,9 @@ import json
 import ctypes
 import re
 
+# Import centralized constants
+from constants import THEME_FILES, DEFAULT_SETTINGS
+
 
 # Application directories and paths
 def get_app_data_dir():
@@ -62,22 +65,6 @@ os.makedirs(PROFILES_DIR, exist_ok=True)
 
 # Migrate old files on first run
 migrate_old_files()
-
-# Theme file mappings
-THEME_FILES = {
-    "Dark (Default)": "theme_dark_default.qss",
-    "Dark with Blue Accent": "theme_dark_blue.qss",
-    "Dark with Red Accent": "theme_dark_red.qss",
-}
-
-# Default settings
-DEFAULT_SETTINGS = {
-    "latency": 20,
-    "macros_enabled": False,
-    "keybind_mode": "arrows",
-    "require_admin": False,
-    "sound_enabled": False,
-}
 
 
 # Utility functions

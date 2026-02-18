@@ -4,25 +4,27 @@ Refactored for better modularity and maintainability
 """
 
 import sys
-import json
 import os
 import ctypes
-import keyboard
 
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QGridLayout, QLabel,
                              QHBoxLayout, QVBoxLayout, QLineEdit, QPushButton, QComboBox,
                              QMessageBox, QListWidget, QToolButton, QCheckBox,
-                             QSystemTrayIcon, QMenu, QSizePolicy, QListWidgetItem, QSlider)
+                             QSizePolicy, QListWidgetItem, QSlider, QInputDialog)
 from PyQt6.QtCore import Qt, QTimer, QEvent, QSize
 from PyQt6.QtGui import QIcon
 
 # Import from our modular structure
-from config import (PROFILES_DIR, SETTINGS_FILE, ASSETS_DIR, LEGACY_NAME_MAP,
-                   get_theme_stylesheet, load_settings, save_settings)
+from config import (PROFILES_DIR, ASSETS_DIR, get_theme_stylesheet, load_settings, 
+                   save_settings)
+from constants import NUMPAD_LAYOUT, DEPARTMENT_HEADER_STYLE
 from stratagem_data import STRATAGEMS, STRATAGEMS_BY_DEPARTMENT
 from version import VERSION, APP_NAME
-from ui_components import (TestEnvironment, SettingsWindow, DraggableIcon,   
-                           NumpadSlot, comm)
+from dialogs import TestEnvironment, SettingsWindow
+from widgets import DraggableIcon, NumpadSlot, comm
+from profile_manager import ProfileManager
+from macro_engine import MacroEngine
+from tray_manager import TrayManager
 from update_manager import check_for_updates_startup
 
 
@@ -38,9 +40,24 @@ class StratagemApp(QMainWindow):
         self.undo_btn = None  # Will be set in initUI
         self.save_btn = None
         
+        # Initialize macro engine
+        self.macro_engine = MacroEngine(
+            lambda: self.slots,
+            lambda: self.global_settings,
+            self.map_direction_to_key
+        )
+        
         self.initUI()
         self.refresh_profiles()
-        self.setup_tray()
+        
+        # Initialize tray manager
+        self.tray_manager = TrayManager(
+            self.app_icon if hasattr(self, 'app_icon') and self.app_icon else None
+        )
+        self.tray_manager.toggle_macros.connect(self.set_macros_enabled)
+        self.tray_manager.show_window.connect(self._show_window)
+        self.tray_manager.quit_app.connect(self.quit_application)
+        self.tray_manager.setup()
         
         # Autoload profile if enabled
         self._autoload_last_profile()
@@ -250,17 +267,7 @@ class StratagemApp(QMainWindow):
             header_layout.setSpacing(0)
             
             header_label = QLabel(department)
-            header_label.setStyleSheet("""
-                QLabel {
-                    color: #00d4ff;
-                    font-weight: bold;
-                    font-size: 12px;
-                    padding: 10px 8px 8px 8px;
-                    background: rgba(0, 100, 120, 0.2);
-                    border-bottom: 1px solid rgba(0, 212, 255, 0.3);
-                    border-radius: 0px;
-                }
-            """)
+            header_label.setStyleSheet(DEPARTMENT_HEADER_STYLE)
             header_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             header_layout.addWidget(header_label)
             header_container.setLayout(header_layout)
@@ -285,27 +292,8 @@ class StratagemApp(QMainWindow):
         grid = QGridLayout()
         grid.setSpacing(12)
         
-        # Define numpad layout: (scan_code, label, row, col, rowspan, colspan)
-        numpad_layout = [
-            ('53', '/', 0, 1, 1, 1),
-            ('55', '*', 0, 2, 1, 1),
-            ('74', '-', 0, 3, 1, 1),
-            ('71', '7', 1, 0, 1, 1),
-            ('72', '8', 1, 1, 1, 1),
-            ('73', '9', 1, 2, 1, 1),
-            ('78', '+', 1, 3, 2, 1),
-            ('75', '4', 2, 0, 1, 1),
-            ('76', '5', 2, 1, 1, 1),
-            ('77', '6', 2, 2, 1, 1),
-            ('79', '1', 3, 0, 1, 1),
-            ('80', '2', 3, 1, 1, 1),
-            ('81', '3', 3, 2, 1, 1),
-            ('28', 'Enter', 3, 3, 2, 1),
-            ('82', '0', 4, 0, 1, 2),
-            ('83', '.', 4, 2, 1, 1),
-        ]
-        
-        for scan_code, label, row, col, rowspan, colspan in numpad_layout:
+        # Use numpad layout from constants
+        for scan_code, label, row, col, rowspan, colspan in NUMPAD_LAYOUT:
             slot = NumpadSlot(scan_code, label, self)
             grid.addWidget(slot, row, col, rowspan, colspan)
             self.slots[scan_code] = slot
@@ -382,10 +370,7 @@ class StratagemApp(QMainWindow):
             self.hide()
             event.ignore()
         else:
-            try:
-                keyboard.unhook_all()
-            except:
-                pass
+            self.macro_engine.disable()
             event.accept()
 
     # UI update methods
@@ -453,16 +438,6 @@ class StratagemApp(QMainWindow):
             self.status_text_label.setProperty("state", "enabled" if enabled else "disabled")
             self.status_text_label.style().unpolish(self.status_text_label)
             self.status_text_label.style().polish(self.status_text_label)
-        
-        if hasattr(self, "tray_toggle_action"):
-            self.tray_toggle_action.blockSignals(True)
-            self.tray_toggle_action.setChecked(enabled)
-            self.tray_toggle_action.setText("Disable Macros" if enabled else "Enable Macros")
-            self.tray_toggle_action.blockSignals(False)
-        
-        if hasattr(self, "tray_icon"):
-            state = "ON" if enabled else "OFF"
-            self.tray_icon.setToolTip(f"Helldivers Numpad Macros ({state})")
 
     # Settings and theme methods
     def apply_theme(self, theme_name="Dark (Default)"):
@@ -516,62 +491,41 @@ class StratagemApp(QMainWindow):
         """Manually save current profile"""
         current = self.profile_box.currentText()
         if current == "Create new profile":
-            from PyQt6.QtWidgets import QInputDialog
             name, ok = QInputDialog.getText(self, "New Profile", "Enter name:")
             if ok and name:
                 clean_name = os.path.splitext(name)[0]
-                self.save_to_file(os.path.join(PROFILES_DIR, f"{clean_name}.json"))
+                state = self.get_current_state()
+                ProfileManager.save_profile(clean_name, state)
                 self.refresh_profiles()
                 self.profile_box.setCurrentText(clean_name)
                 self.show_status("PROFILE SAVED")
             else:
                 return
         else:
-            self.save_to_file(os.path.join(PROFILES_DIR, f"{current}.json"))
+            state = self.get_current_state()
+            ProfileManager.save_profile(current, state)
             self.show_status("PROFILE SAVED")
         self.save_current_state()
         self.update_undo_state()
-
-    def save_to_file(self, path):
-        """Save current configuration to file"""
-        data = {
-            "speed": self.speed_slider.value(),
-            "mappings": {k: v.assigned_stratagem for k, v in self.slots.items() if v.assigned_stratagem}
-        }
-        with open(path, "w") as f:
-            json.dump(data, f, indent=2)
 
     def load_profile(self, path):
         """Load profile from file"""
         for slot in self.slots.values():
             slot.clear_slot()
         
-        if os.path.exists(path):
-            with open(path, "r") as f:
-                data = json.load(f)
-                self.speed_slider.blockSignals(True)
-                self.speed_slider.setValue(data.get("speed", 20))
-                self.speed_slider.blockSignals(False)
-                mappings = data.get("mappings", {})
-                
-                # Migrate old stratagem names to new names
-                migrated = False
-                updated_mappings = {}
-                for code, strat in mappings.items():
-                    if strat in LEGACY_NAME_MAP:
-                        updated_mappings[code] = LEGACY_NAME_MAP[strat]
-                        migrated = True
-                    else:
-                        updated_mappings[code] = strat
-                    
-                    if code in self.slots:
-                        self.slots[code].assign(updated_mappings[code])
-                
-                # Save migrated profile
-                if migrated:
-                    data["mappings"] = updated_mappings
-                    with open(path, "w") as f:
-                        json.dump(data, f, indent=2)
+        # Load profile using ProfileManager
+        profile_name = os.path.splitext(os.path.basename(path))[0]
+        data = ProfileManager.load_profile(profile_name)
+        
+        if data:
+            self.speed_slider.blockSignals(True)
+            self.speed_slider.setValue(data.get("speed", 20))
+            self.speed_slider.blockSignals(False)
+            
+            mappings = data.get("mappings", {})
+            for code, strat in mappings.items():
+                if code in self.slots:
+                    self.slots[code].assign(strat)
         
         self.sync_macro_hook_state()
         self.save_current_state()
@@ -708,23 +662,26 @@ class StratagemApp(QMainWindow):
         """Enable or disable macros"""
         self.global_settings["macros_enabled"] = bool(enabled)
         self.save_global_settings()
+        
         if enabled:
-            self.inject_all()
+            self.macro_engine.enable()
             if notify:
                 self.show_status("Macros enabled")
         else:
-            try:
-                keyboard.unhook_all()
-            except:
-                pass
+            self.macro_engine.disable()
             if notify:
                 self.show_status("Macros disabled")
+        
         self.update_macro_toggle_ui()
+        
+        # Update tray manager if it exists
+        if hasattr(self, 'tray_manager'):
+            self.tray_manager.update_state(enabled)
 
     def sync_macro_hook_state(self, notify=False):
         """Sync macro hook state with settings"""
         self.set_macros_enabled(self.global_settings.get("macros_enabled", False), notify=notify)
-
+    
     def map_direction_to_key(self, direction):
         """Map stratagem direction to actual key based on user setting"""
         keybind_mode = self.global_settings.get("keybind_mode", "arrows")
@@ -735,66 +692,25 @@ class StratagemApp(QMainWindow):
             mapping = {"up": "up", "down": "down", "left": "left", "right": "right"}
         
         return mapping.get(direction, direction)
-
-    def inject_all(self):
-        """Inject keyboard hooks for all macros"""
-        try:
-            keyboard.unhook_all()
-        except:
-            pass
-        keyboard.hook(self.universal_suppressor)
-
-    def universal_suppressor(self, event):
-        """Universal keyboard event suppressor for macro execution"""
-        if event.event_type == keyboard.KEY_DOWN:
-            slot = self.slots.get(str(event.scan_code))
-            if slot and slot.assigned_stratagem:
-                if getattr(event, 'is_keypad', True):
-                    stratagem_name = slot.assigned_stratagem
-                    seq = STRATAGEMS.get(stratagem_name)
-                    if seq:
-                        slot.run_macro(stratagem_name, seq, slot.label_text)
-                    return False
-        return True
-
-    # System tray
-    def setup_tray(self):
-        """Setup system tray icon and menu"""
-        self.tray_icon = QSystemTrayIcon(self)
-        if hasattr(self, 'app_icon') and self.app_icon:
-            self.tray_icon.setIcon(self.app_icon)
-        
-        tray_menu = QMenu()
-        self.tray_toggle_action = tray_menu.addAction("Enable Macros")
-        self.tray_toggle_action.setCheckable(True)
-        self.tray_toggle_action.toggled.connect(lambda checked: self.set_macros_enabled(checked))
-        
-        show_action = tray_menu.addAction("Show")
-        show_action.triggered.connect(self.showNormal)
-        
-        tray_menu.addSeparator()
-        quit_action = tray_menu.addAction("Quit")
-        quit_action.triggered.connect(self.quit_application)
-        
-        self.tray_icon.setContextMenu(tray_menu)
-        self.tray_icon.activated.connect(self.toggle_window_visibility)
-        self.tray_icon.show()
-        self.update_macro_toggle_ui()
-
-    def toggle_window_visibility(self, reason):
-        """Toggle window visibility when tray icon is clicked"""
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            if self.isVisible():
-                self.hide()
-            else:
-                self.showNormal()
+    
+    def on_macro_triggered(self, scan_code):
+        """Callback when a macro is triggered by the macro engine"""
+        slot = self.slots.get(str(scan_code))
+        if slot and slot.assigned_stratagem:
+            stratagem_name = slot.assigned_stratagem
+            seq = STRATAGEMS.get(stratagem_name)
+            if seq:
+                slot.run_macro(stratagem_name, seq, slot.label_text)
+    
+    def _show_window(self):
+        """Show and activate the main window"""
+        self.showNormal()
+        self.activateWindow()
+        self.raise_()
 
     def quit_application(self):
         """Quit the application"""
-        try:
-            keyboard.unhook_all()
-        except:
-            pass
+        self.macro_engine.disable()
         QApplication.quit()
 
     # Update checking
