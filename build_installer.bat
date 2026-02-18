@@ -35,13 +35,22 @@ if errorlevel 1 (
 )
 
 echo.
-echo [Step 1/3] Cleaning previous build...
+echo [Step 0/4] Generating version file from src/config/version.py...
+python build_version_file.py
+if errorlevel 1 (
+    echo ERROR: Failed to generate version file
+    pause < con
+    exit /b 1
+)
+
+echo.
+echo [Step 1/4] Cleaning previous build...
 if exist "build" rmdir /s /q "build"
 if exist "dist" rmdir /s /q "dist"
 if exist "HelldiversNumpadMacros.spec" del "HelldiversNumpadMacros.spec"
 
 echo.
-echo [Step 2/3] Building EXE with PyInstaller...
+echo [Step 2/4] Building EXE with PyInstaller...
 echo This may take a few minutes...
 
 pyinstaller --noconfirm --onefile --windowed ^
@@ -53,6 +62,7 @@ pyinstaller --noconfirm --onefile --windowed ^
     --add-data "src/ui/theme_dark_default.qss;src/ui/" ^
     --add-data "src/ui/theme_dark_blue.qss;src/ui/" ^
     --add-data "src/ui/theme_dark_red.qss;src/ui/" ^
+    --version-file "version_file.txt" ^
     --icon "assets/icon.ico" ^
     --manifest "app.manifest" ^
     main.py
@@ -76,7 +86,7 @@ powershell -NoProfile -Command "& { $q = [char]34; $content = Get-Content instal
 
 REM Check if Inno Setup is installed
 echo.
-echo [Step 3/3] Creating installer with Inno Setup...
+echo [Step 4/4] Creating installer with Inno Setup...
 
 set "INNO_PATH="
 
