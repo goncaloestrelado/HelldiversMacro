@@ -26,17 +26,24 @@ class DownloadThread(QThread):
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
     
-    def __init__(self, url, filename):
+    def __init__(self, url, filename, target_dir=None):
         super().__init__()
         self.url = url
         self.filename = filename
+        self.target_dir = target_dir
         self.cancelled = False
     
     def run(self):
         try:
             request = Request(self.url, headers={'User-Agent': 'HelldiversMacro-UpdateChecker'})
-            temp_dir = tempfile.gettempdir()
-            file_path = os.path.join(temp_dir, self.filename)
+            
+            # Use target_dir if provided, otherwise use temp directory
+            if self.target_dir:
+                download_dir = self.target_dir
+            else:
+                download_dir = tempfile.gettempdir()
+            
+            file_path = os.path.join(download_dir, self.filename)
             
             with urlopen(request, timeout=30) as response:
                 total_size = int(response.headers.get('Content-Length', 0))
@@ -272,6 +279,258 @@ class SetupDialog(QDialog):
         self.reject()
 
 
+class PortableUpdateDialog(QDialog):
+    """Dialog for downloading and installing portable updates"""
+    def __init__(self, update_info, parent=None):
+        super().__init__(parent)
+        self.update_info = update_info
+        self.download_thread = None
+        self.downloaded_file = None
+        
+        self.setObjectName("portable_update_dialog")
+        self.setWindowTitle("Update Portable Version")
+        self.setMinimumWidth(500)
+        self.setMinimumHeight(250)
+        
+        layout = QVBoxLayout(self)
+        layout.setSpacing(15)
+        
+        # Title
+        title = QLabel(f"Update to {update_info.get('tag_name', update_info['latest_version'])}")
+        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        title.setStyleSheet("color: #3ddc84;")
+        layout.addWidget(title)
+        
+        # Description
+        desc = QLabel("The new version will be downloaded to the same folder as the current executable.")
+        desc.setWordWrap(True)
+        desc.setStyleSheet("color: #ccc; padding: 10px 0;")
+        layout.addWidget(desc)
+        
+        # Current path info
+        current_exe = sys.executable
+        if hasattr(sys, 'frozen') and sys.frozen:
+            current_exe = sys.executable
+        else:
+            # Running from Python, use main.py location
+            current_exe = os.path.abspath(sys.argv[0])
+        
+        self.current_dir = os.path.dirname(current_exe)
+        self.current_exe_name = os.path.basename(current_exe)
+        
+        path_label = QLabel(f"Location: {self.current_dir}")
+        path_label.setStyleSheet("color: #aaa; font-size: 11px; padding: 5px 0;")
+        path_label.setWordWrap(True)
+        layout.addWidget(path_label)
+        
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setStyleSheet(
+            "QProgressBar { background: #1a1a1a; border: 1px solid #333; border-radius: 4px; "
+            "text-align: center; color: #ddd; }"
+            "QProgressBar::chunk { background: #3ddc84; }"
+        )
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar)
+        
+        # Status label
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("color: #aaa; font-size: 11px;")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.status_label)
+        
+        layout.addStretch(1)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch(1)
+        
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.clicked.connect(self.cancel_update)
+        btn_layout.addWidget(self.cancel_btn)
+        
+        self.download_btn = QPushButton("Download Update")
+        self.download_btn.setStyleSheet(
+            "background: #3ddc84; color: #000; font-weight: bold; "
+            "padding: 8px 20px; border-radius: 4px;"
+        )
+        self.download_btn.clicked.connect(self.start_download)
+        btn_layout.addWidget(self.download_btn)
+        
+        layout.addLayout(btn_layout)
+    
+    def start_download(self):
+        """Start downloading the portable update"""
+        download_url = self._get_portable_download_url()
+        
+        if not download_url:
+            QMessageBox.warning(
+                self, "Download Error",
+                "Could not find portable version download URL.\n\n"
+                "Please download manually from GitHub."
+            )
+            return
+        
+        # Start download
+        self.download_btn.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.status_label.setText("Downloading update...")
+        
+        # Generate filename for new version
+        filename = os.path.basename(download_url.split('?')[0])  # Remove query params
+        if not filename.endswith('.exe'):
+            filename = f"HelldiversNumpadMacros_{self.update_info.get('tag_name', 'new')}.exe"
+        
+        # Add suffix to avoid overwriting current exe during download
+        self.new_filename = filename.replace('.exe', '_new.exe')
+        
+        self.download_thread = DownloadThread(download_url, self.new_filename, self.current_dir)
+        self.download_thread.progress.connect(self.update_progress)
+        self.download_thread.finished.connect(self.download_complete)
+        self.download_thread.error.connect(self.download_error)
+        self.download_thread.start()
+    
+    def _get_portable_download_url(self):
+        """Get the portable executable download URL"""
+        # Check if update_info already has download_url
+        download_url = self.update_info.get('download_url')
+        if download_url:
+            return download_url
+        
+        # Search in assets for portable executable
+        assets = self.update_info.get('assets', [])
+        for asset in assets:
+            name = asset.get('name', '').lower()
+            if 'portable' in name and name.endswith('.exe'):
+                return asset.get('browser_download_url')
+        
+        # Fallback: look for any .exe that's not setup
+        for asset in assets:
+            name = asset.get('name', '').lower()
+            if name.endswith('.exe') and 'setup' not in name:
+                return asset.get('browser_download_url')
+        
+        return None
+    
+    def update_progress(self, downloaded, total):
+        """Update download progress"""
+        if total > 0:
+            percent = int((downloaded / total) * 100)
+            self.progress_bar.setValue(percent)
+            mb_downloaded = downloaded / (1024 * 1024)
+            mb_total = total / (1024 * 1024)
+            self.status_label.setText(f"Downloading: {mb_downloaded:.1f} MB / {mb_total:.1f} MB")
+    
+    def download_complete(self, file_path):
+        """Handle download completion"""
+        self.downloaded_file = file_path
+        self.status_label.setText("Download complete!")
+        self.progress_bar.setValue(100)
+        
+        # Ask user if they want to delete the old version
+        reply = QMessageBox.question(
+            self, "Delete Old Version?",
+            f"The new version has been downloaded to:\n{file_path}\n\n"
+            f"Do you want to delete the previous version?\n{os.path.join(self.current_dir, self.current_exe_name)}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.replace_old_version()
+        else:
+            self.keep_both_versions()
+    
+    def replace_old_version(self):
+        """Replace the old version with the new one"""
+        try:
+            old_exe_path = os.path.join(self.current_dir, self.current_exe_name)
+            backup_path = old_exe_path + '.old'
+            
+            # Rename old exe to .old (in case we need to rollback)
+            if os.path.exists(old_exe_path):
+                if os.path.exists(backup_path):
+                    os.remove(backup_path)
+                os.rename(old_exe_path, backup_path)
+            
+            # Rename new exe to proper name
+            final_path = os.path.join(self.current_dir, self.current_exe_name)
+            os.rename(self.downloaded_file, final_path)
+            
+            # Schedule old backup for deletion on next start
+            QMessageBox.information(
+                self, "Update Complete",
+                f"Update installed successfully!\n\n"
+                f"The new version is ready at:\n{final_path}\n\n"
+                f"Please restart the application to use the new version.\n\n"
+                f"Old version backup: {backup_path}\n"
+                f"(You can delete it manually if the new version works correctly)"
+            )
+            
+            self.accept()
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Update Error",
+                f"Failed to replace old version:\n{str(e)}\n\n"
+                f"The new version is available at:\n{self.downloaded_file}\n\n"
+                f"You can manually rename it to replace the old version."
+            )
+    
+    def keep_both_versions(self):
+        """Keep both old and new versions"""
+        # Remove the '_new' suffix for cleaner filename
+        final_filename = self.new_filename.replace('_new.exe', '.exe')
+        if final_filename == self.current_exe_name:
+            # If names would conflict, keep the _new suffix but make it version-specific
+            tag = self.update_info.get('tag_name', 'updated')
+            final_filename = self.current_exe_name.replace('.exe', f'_{tag}.exe')
+        
+        final_path = os.path.join(self.current_dir, final_filename)
+        
+        try:
+            # Rename to final name
+            if final_path != self.downloaded_file:
+                if os.path.exists(final_path):
+                    os.remove(final_path)
+                os.rename(self.downloaded_file, final_path)
+            
+            QMessageBox.information(
+                self, "Download Complete",
+                f"The new version has been downloaded to:\n{final_path}\n\n"
+                f"You can use either version. To use the new version, run:\n{final_filename}"
+            )
+            
+            self.accept()
+            
+        except Exception as e:
+            QMessageBox.warning(
+                self, "Rename Failed",
+                f"Could not rename file:\n{str(e)}\n\n"
+                f"The new version is available at:\n{self.downloaded_file}"
+            )
+            self.accept()
+    
+    def download_error(self, error_msg):
+        """Handle download error"""
+        self.download_btn.setEnabled(False)
+        self.progress_bar.setVisible(False)
+        self.status_label.setText("")
+        
+        QMessageBox.warning(
+            self, "Download Failed",
+            f"Failed to download update:\n{error_msg}\n\n"
+            "Please try again or download manually from GitHub."
+        )
+    
+    def cancel_update(self):
+        """Cancel the update download"""
+        if self.download_thread and self.download_thread.isRunning():
+            self.download_thread.cancel()
+            self.download_thread.wait()
+        self.reject()
+
+
 class UpdateDialog(QDialog):
     """Dialog to notify user of available update"""
     def __init__(self, update_info, parent=None):
@@ -360,11 +619,10 @@ class UpdateDialog(QDialog):
         setup_dlg.exec()
     
     def download_update(self):
-        """Open browser to download page"""
-        from PyQt6.QtGui import QDesktopServices
-        from PyQt6.QtCore import QUrl
-        QDesktopServices.openUrl(QUrl(self.update_info['release_url']))
+        """Download portable update to current directory"""
         self.accept()
+        portable_dlg = PortableUpdateDialog(self.update_info, self.parent())
+        portable_dlg.exec()
     
     def skip_version(self):
         """Skip this version and don't show again"""
