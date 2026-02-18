@@ -59,9 +59,24 @@ class DownloadThread(QThread):
                         f.write(chunk)
                         downloaded += len(chunk)
                         self.progress.emit(downloaded, total_size)
+                    
+                    # Ensure all data is written to disk
+                    if not self.cancelled:
+                        f.flush()
+                        os.fsync(f.fileno())
             
+            # Small delay to ensure file system has processed the write
             if not self.cancelled:
-                self.finished.emit(file_path)
+                time.sleep(0.5)
+                # Verify the file was written completely
+                if os.path.exists(file_path):
+                    actual_size = os.path.getsize(file_path)
+                    if total_size > 0 and actual_size != total_size:
+                        self.error.emit(f"Download incomplete: {actual_size}/{total_size} bytes")
+                        return
+                    self.finished.emit(file_path)
+                else:
+                    self.error.emit("Downloaded file not found after write")
         except Exception as e:
             self.error.emit(str(e))
     
@@ -425,148 +440,89 @@ class PortableUpdateDialog(QDialog):
     def download_complete(self, file_path):
         """Handle download completion"""
         self.downloaded_file = file_path
-        self.status_label.setText("Download complete!")
+        
+        # Verify the file before proceeding
+        if not os.path.exists(file_path):
+            self.status_label.setText("Error: File not found!")
+            QMessageBox.critical(
+                self, "Download Error",
+                "The downloaded file could not be found.\n\n"
+                "Please try again or download manually from GitHub."
+            )
+            return
+        
+        file_size = os.path.getsize(file_path)
+        if file_size < 1024 * 1024:  # Less than 1MB
+            self.status_label.setText("Error: File incomplete!")
+            QMessageBox.critical(
+                self, "Download Error",
+                f"The downloaded file appears incomplete ({file_size} bytes).\n\n"
+                "Please try downloading again."
+            )
+            return
+        
+        self.status_label.setText(f"Download complete! ({file_size / (1024*1024):.1f} MB)")
         self.progress_bar.setValue(100)
         
-        # Ask user if they want to delete the old version
-        reply = QMessageBox.question(
-            self, "Delete Old Version?",
-            f"The new version has been downloaded to:\n{file_path}\n\n"
-            f"Do you want to delete the previous version?\n{os.path.join(self.current_dir, self.current_exe_name)}",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes
-        )
-        
-        if reply == QMessageBox.StandardButton.Yes:
-            self.replace_old_version()
-        else:
-            self.keep_both_versions()
+        # Automatic replacement: rename old exe and launch new one
+        self.launch_new_version()
     
-    def replace_old_version(self):
-        """Replace the old version with the new one"""
+    def launch_new_version(self):
+        """Launch the new version and close the current app"""
         try:
             old_exe_path = os.path.join(self.current_dir, self.current_exe_name)
             new_exe_path = self.downloaded_file
+            old_exe_backup = old_exe_path + ".old"
             
-            # Create a cleanup and restart script
-            cleanup_script = self._create_cleanup_script(old_exe_path, new_exe_path)
-            
-            if cleanup_script:
-                # Show message before closing
-                QMessageBox.information(
-                    self, "Update Complete",
-                    "The update has been downloaded successfully.\n\n"
-                    "The application will now close, delete the old version, "
-                    "and launch the new version."
-                )
-                
-                # Close the application
-                self.accept()
-                
-                # Execute cleanup script in background
-                subprocess.Popen(cleanup_script, shell=True)
-                
-                # Give time for script to be created before app closes
-                time.sleep(0.5)
-                QApplication.quit()
-            else:
+            # Rename current exe to .old
+            try:
+                if os.path.exists(old_exe_backup):
+                    os.remove(old_exe_backup)
+                os.rename(old_exe_path, old_exe_backup)
+            except Exception as e:
                 QMessageBox.critical(
                     self, "Update Error",
-                    "Failed to create cleanup script.\n\n"
-                    "The new version is available at:\n"
-                    f"{new_exe_path}\n\n"
-                    "You can manually delete the old version and rename the new one."
+                    f"Could not rename old version:\n{str(e)}\n\n"
+                    "The update cannot proceed. Try closing any programs that might be using the file."
                 )
+                return
+            
+            # Rename new exe to original name
+            try:
+                final_new_path = os.path.join(self.current_dir, self.current_exe_name)
+                os.rename(new_exe_path, final_new_path)
+            except Exception as e:
+                # Restore old exe if renaming new one failed
+                os.rename(old_exe_backup, old_exe_path)
+                QMessageBox.critical(
+                    self, "Update Error",
+                    f"Could not rename new version:\n{str(e)}\n\n"
+                    "The update has been rolled back."
+                )
+                return
+            
+            # Show success message
+            QMessageBox.information(
+                self, "Update Complete",
+                "The new version will now launch.\n\n"
+                f"The old version has been saved as:\n{os.path.basename(old_exe_backup)}\n\n"
+                "You can manually delete it later if you want to free up space."
+            )
+            
+            # Launch new version
+            subprocess.Popen([final_new_path])
+            
+            # Close current app
+            self.accept()
+            time.sleep(0.2)
+            QApplication.quit()
             
         except Exception as e:
             QMessageBox.critical(
                 self, "Update Error",
-                f"Failed to prepare update:\n{str(e)}\n\n"
-                f"The new version is available at:\n{self.downloaded_file}\n\n"
-                "You can manually rename it to replace the old version."
+                f"Failed to launch new version:\n{str(e)}\n\n"
+                f"You can manually run the new version at:\n{self.downloaded_file}"
             )
-    
-    def _create_cleanup_script(self, old_exe_path, new_exe_path):
-        """Create a batch script to clean up old version and start new one"""
-        try:
-            # Get unique filename for cleanup script
-            cleanup_script_path = os.path.join(
-                tempfile.gettempdir(), 
-                f"cleanup_helldiving_update_{int(time.time())}.bat"
-            )
-            
-            # Create batch script content
-            # The script:
-            # 1. Waits 2 seconds for app to fully close
-            # 2. Deletes the old exe
-            # 3. Renames the new exe to the original name
-            # 4. Runs the new exe
-            # 5. Deletes itself
-            
-            batch_content = f"""@echo off
-REM Wait for the old application to close
-timeout /t 2 /nobreak
-
-REM Delete old version
-if exist "{old_exe_path}" (
-    del /f /q "{old_exe_path}"
-)
-
-REM Rename new version to original name
-if exist "{new_exe_path}" (
-    ren "{new_exe_path}" "{os.path.basename(old_exe_path)}"
-)
-
-REM Start the new version
-start "" "{old_exe_path}"
-
-REM Delete this cleanup script
-del /f /q "%~f0"
-"""
-            
-            # Write script to temporary file
-            with open(cleanup_script_path, 'w') as f:
-                f.write(batch_content)
-            
-            return cleanup_script_path
-            
-        except Exception as e:
-            print(f"Failed to create cleanup script: {e}")
-            return None
-    
-    def keep_both_versions(self):
-        """Keep both old and new versions"""
-        # Remove the '_new' suffix for cleaner filename
-        final_filename = self.new_filename.replace('_new.exe', '.exe')
-        if final_filename == self.current_exe_name:
-            # If names would conflict, keep the _new suffix but make it version-specific
-            tag = self.update_info.get('tag_name', 'updated')
-            final_filename = self.current_exe_name.replace('.exe', f'_{tag}.exe')
-        
-        final_path = os.path.join(self.current_dir, final_filename)
-        
-        try:
-            # Rename to final name
-            if final_path != self.downloaded_file:
-                if os.path.exists(final_path):
-                    os.remove(final_path)
-                os.rename(self.downloaded_file, final_path)
-            
-            QMessageBox.information(
-                self, "Download Complete",
-                f"The new version has been downloaded to:\n{final_path}\n\n"
-                f"You can use either version. To use the new version, run:\n{final_filename}"
-            )
-            
-            self.accept()
-            
-        except Exception as e:
-            QMessageBox.warning(
-                self, "Rename Failed",
-                f"Could not rename file:\n{str(e)}\n\n"
-                f"The new version is available at:\n{self.downloaded_file}"
-            )
-            self.accept()
     
     def download_error(self, error_msg):
         """Handle download error"""
@@ -688,6 +644,72 @@ class UpdateDialog(QDialog):
         settings['skipped_version'] = self.update_info.get('tag_name', self.update_info['latest_version'])
         save_settings(settings)
         self.reject()
+
+
+def check_and_prompt_old_version_cleanup(parent_widget=None):
+    """
+    Check for old version files (.old) from updates and prompt user to delete them.
+    This is called on startup after a successful update.
+    Returns True if cleanup was performed or skipped, False on error.
+    """
+    try:
+        current_exe = sys.executable
+        if hasattr(sys, 'frozen') and sys.frozen:
+            current_exe = sys.executable
+        else:
+            # Running from Python, use main.py location
+            current_exe = os.path.abspath(sys.argv[0])
+        
+        current_dir = os.path.dirname(current_exe)
+        current_exe_name = os.path.basename(current_exe)
+        
+        # Look for .old version
+        old_version_path = os.path.join(current_dir, current_exe_name + ".old")
+        
+        if os.path.exists(old_version_path):
+            from PyQt6.QtWidgets import QMessageBox
+            
+            old_size = os.path.getsize(old_version_path) / (1024 * 1024)
+            
+            reply = QMessageBox.question(
+                parent_widget,
+                "Delete Old Version?",
+                f"An old version of the application was found.\\n\\n"
+                f"File: {os.path.basename(old_version_path)}\\n"
+                f"Size: {old_size:.1f} MB\\n\\n"
+                f"Would you like to delete it?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                try:
+                    os.remove(old_version_path)
+                    print(f"[Update] Deleted old version: {old_version_path}")
+                    QMessageBox.information(
+                        parent_widget,
+                        "Old Version Deleted",
+                        "The old version has been successfully removed."
+                    )
+                    return True
+                except Exception as e:
+                    print(f"[Update] Error deleting old version: {e}")
+                    QMessageBox.warning(
+                        parent_widget,
+                        "Deletion Failed",
+                        f"Could not delete the old version:\\n{str(e)}\\n\\n"
+                        f"You can manually delete:\\n{old_version_path}"
+                    )
+                    return False
+            else:
+                print(f"[Update] User chose to keep old version: {old_version_path}")
+                return True
+        
+        return True
+        
+    except Exception as e:
+        print(f"[Update] Error checking for old version: {e}")
+        return False
 
 
 def check_for_updates_startup(parent_widget, global_settings):
