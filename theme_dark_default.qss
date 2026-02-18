@@ -51,6 +51,9 @@ QLineEdit#search_input { padding: 4px 28px 4px 8px; background: #111; border: 1p
 QToolButton#search_clear_btn { background: #151515; border: 1px solid #333; border-radius: 8px; color: #ffcc00; min-width: 16px; min-height: 16px; font-size: 8pt; font-weight: bold; padding: 0px; text-align: center; }
 QToolButton#search_clear_btn:hover { background: #1f1f1f; border: 1px solid #ffcc00; }
 
+/* Department headers */
+QLabel#department_header { color: #ffcc00; font-weight: bold; font-size: 12px; padding: 10px 8px 8px 8px; background: rgba(255, 204, 0, 0.2); border-bottom: 1px solid rgba(255, 204, 0, 0.3); border-radius: 0px; }
+
 /* Test Environment Dialog */
 QDialog#test_env { background: #050505; color: #ffcc00; border: 2px solid #ffcc00; min-width: 500px; min-height: 300px; }
 QLabel#test_key { color: #888; font-size: 12pt; border: none; }

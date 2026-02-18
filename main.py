@@ -1,1282 +1,203 @@
-import sys, json, keyboard, time, os, winsound, re, ctypes, webbrowser, tempfile, subprocess, shutil
-from urllib.request import urlopen, Request
-from PyQt6.QtWidgets import (QApplication, QWidget, QGridLayout, QLabel, 
-                             QHBoxLayout, QVBoxLayout, QScrollArea, QLineEdit, 
-                             QPushButton, QFileDialog, QMessageBox, QDialog,
-                             QComboBox, QInputDialog, QSlider, QMenuBar, QSpinBox, QMainWindow, QMenu, QListWidget, QStackedWidget, QListWidgetItem, QCheckBox, QSystemTrayIcon, QToolButton, QStyle, QSizePolicy, QTextBrowser, QProgressBar)
-from PyQt6.QtCore import Qt, QMimeData, pyqtSignal, QObject, QTimer, QRect, QEvent, QThread, QSize
-from PyQt6.QtSvgWidgets import QSvgWidget
-from PyQt6.QtGui import QDrag, QFont, QPixmap, QAction, QIcon, QDesktopServices, QColor
-from stratagem_data import STRATAGEMS, STRATAGEMS_BY_DEPARTMENT
-from version import VERSION, APP_NAME, GITHUB_REPO_OWNER, GITHUB_REPO_NAME
-import update_checker
+import sys
+import os
+import ctypes
 
-# Get app data directory (Windows: %APPDATA%\HelldiversNumpadMacros)
-def get_app_data_dir():
-    """Get the application data directory"""
-    appdata = os.environ.get('APPDATA')
-    if appdata:
-        app_dir = os.path.join(appdata, "HelldiversNumpadMacros")
-        os.makedirs(app_dir, exist_ok=True)
-        return app_dir
-    else:
-        # Fallback for systems without APPDATA (shouldn't happen on Windows)
-        return "profiles"
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QGridLayout, QLabel,
+                             QHBoxLayout, QVBoxLayout, QLineEdit, QPushButton, QComboBox,
+                             QMessageBox, QListWidget, QToolButton, QCheckBox,
+                             QSizePolicy, QListWidgetItem, QSlider, QInputDialog)
+from PyQt6.QtCore import Qt, QTimer, QEvent, QSize
+from PyQt6.QtGui import QIcon
 
-def migrate_old_files():
-    """Migrate old profile and settings files from app directory to AppData"""
-    new_app_data_dir = get_app_data_dir()
-    old_profiles_dir = "profiles"
-    old_settings_file = "general.json"
-    
-    # Migrate old profiles directory
-    if os.path.exists(old_profiles_dir) and old_profiles_dir != os.path.join(new_app_data_dir, "profiles"):
-        try:
-            new_profiles_dir = os.path.join(new_app_data_dir, "profiles")
-            # Only migrate if new location doesn't already have profiles
-            if not os.path.exists(new_profiles_dir):
-                shutil.copytree(old_profiles_dir, new_profiles_dir)
-            print(f"[Migration] Profiles migrated from {old_profiles_dir} to {new_profiles_dir}")
-        except Exception as e:
-            print(f"[Migration] Warning: Could not migrate profiles directory: {e}")
-    
-    # Migrate old settings file
-    if os.path.exists(old_settings_file):
-        try:
-            new_settings_file = os.path.join(new_app_data_dir, "general.json")
-            # Only migrate if new location doesn't already have settings
-            if not os.path.exists(new_settings_file):
-                shutil.copy2(old_settings_file, new_settings_file)
-            print(f"[Migration] Settings migrated from {old_settings_file} to {new_settings_file}")
-        except Exception as e:
-            print(f"[Migration] Warning: Could not migrate settings file: {e}")
+from src.config import (PROFILES_DIR, ASSETS_DIR, get_theme_stylesheet, load_settings, 
+                       save_settings)
+from src.config.constants import NUMPAD_LAYOUT
+from src.core.stratagem_data import STRATAGEMS, STRATAGEMS_BY_DEPARTMENT
+from src.config.version import VERSION, APP_NAME
+from src.ui.dialogs import TestEnvironment, SettingsWindow
+from src.ui.widgets import DraggableIcon, NumpadSlot, comm
+from src.managers.profile_manager import ProfileManager
+from src.core.macro_engine import MacroEngine
+from src.ui.tray_manager import TrayManager
+from src.managers.update_manager import check_for_updates_startup
 
-PROFILES_DIR = os.path.join(get_app_data_dir(), "profiles")
-SETTINGS_FILE = os.path.join(get_app_data_dir(), "general.json")
-ASSETS_DIR = "assets"
-
-if not os.path.exists(PROFILES_DIR):
-    os.makedirs(PROFILES_DIR)
-
-# Migrate old files from app directory to AppData on first run
-migrate_old_files()
-
-# Theme file mappings
-THEME_FILES = {
-    "Dark (Default)": "theme_dark_default.qss",
-    "Dark with Blue Accent": "theme_dark_blue.qss",
-    "Dark with Red Accent": "theme_dark_red.qss",
-}
-
-class Comm(QObject):
-    update_test_display = pyqtSignal(str, list, str)
-
-comm = Comm()
-
-def normalize(name):
-    return name.lower().replace(" ", "").replace("_", "").replace("-", "").replace("/", "").replace('"', "")
-
-def is_installed():
-    """Check if app is installed or running portable"""
-    exe_path = sys.executable if getattr(sys, 'frozen', False) else __file__
-    exe_dir = os.path.dirname(os.path.abspath(exe_path))
-    
-    # Check if running from Program Files or similar installation directories
-    program_files = os.environ.get('ProgramFiles', 'C:\\Program Files')
-    program_files_x86 = os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)')
-    
-    return exe_dir.startswith(program_files) or exe_dir.startswith(program_files_x86)
-
-def get_install_type():
-    """Get the current installation type: 'installed' or 'portable'"""
-    return "installed" if is_installed() else "portable"
-
-def get_installer_filename(tag_name):
-    """Generate expected installer filename from tag"""
-    version = tag_name.lstrip('v').replace('beta', '')
-    return f"HelldiversNumpadMacros-Setup-{tag_name}.exe"
-
-def is_admin():
-    """Check if the current process has administrator privileges"""
-    try:
-        return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
-        return False
-
-def run_as_admin():
-    """Relaunch the current script with administrator privileges"""
-    try:
-        if getattr(sys, 'frozen', False):
-            # Running as compiled executable
-            script = sys.executable
-        else:
-            # Running as Python script
-            script = os.path.abspath(sys.argv[0])
-        
-        params = ' '.join(sys.argv[1:])
-        ctypes.windll.shell32.ShellExecuteW(None, "runas", script, params, None, 1)
-        return True
-    except:
-        return False
-
-def find_svg_path(name):
-    """Find SVG file for stratagem, with simplified lookup since files now match official names"""
-    base_path = getattr(sys, '_MEIPASS', os.path.abspath("."))
-    assets_lookup = os.path.join(base_path, ASSETS_DIR)
-    target = normalize(name)
-    for root, dirs, files in os.walk(assets_lookup):
-        for f in files:
-            if f.endswith(".svg"):
-                if normalize(os.path.splitext(f)[0]) == target:
-                    return os.path.join(root, f)
-    return None
-
-# Legacy name mapping for automatic migration of old save files
-LEGACY_NAME_MAP = {
-    "Machine Gun": "MG-43 Machine Gun",
-    "Anti-Materiel Rifle": "APW-1 Anti-Materiel Rifle",
-    "Stalwart": "M-105 Stalwart",
-    "Expendable Anti-Tank": "EAT-17 Expendable Anti-Tank",
-    "Recoilless Rifle": "GR-8 Recoilless Rifle",
-    "Flamethrower": "FLAM-40 Flamethrower",
-    "Autocannon": "AC-8 Autocannon",
-    "Heavy Machine Gun": "MG-206 Heavy Machine Gun",
-    "Airburst Rocket Launcher": "RL-77 Airburst Rocket Launcher",
-    "Commando": "MLS-4X Commando",
-    "Railgun": "RS-422 Railgun",
-    "Spear": "FAF-14 Spear",
-    "Jump Pack": "LIFT-850 Jump Pack",
-    "Eagle 500KG Bomb": "Eagle 500kg Bomb",
-    "Fast Recon Vehicle": "M-102 Fast Recon Vehicle",
-    "Bastion": "TD-220 Bastion",
-    "Bastion MK XVI": "TD-220 Bastion",
-    "HMG Emplacement": "E/MG-101 HMG Emplacement",
-    "Shield Generator Relay": "FX-12 Shield Generator Relay",
-    "Tesla Tower": "A/ARC-3 Tesla Tower",
-    "Grenadier Battlement": "E/GL-21 Grenadier Battlement",
-    "Anti-Personnel Minefield": "MD-6 Anti-Personnel Minefield",
-    "Supply Pack": "B-1 Supply Pack",
-    "Grenade Launcher": "GL-21 Grenade Launcher",
-    "Laser Cannon": "LAS-98 Laser Cannon",
-    "Incendiary Mines": "MD-I4 Incendiary Mines",
-    "Guard Dog Rover": "AX/LAS-5 \"Guard Dog\" Rover",
-    "Ballistic Shield Backpack": "SH-20 Ballistic Shield Backpack",
-    "Arc Thrower": "ARC-3 Arc Thrower",
-    "Anti-Tank Mines": "MD-17 Anti-Tank Mines",
-    "Quasar Cannon": "LAS-99 Quasar Cannon",
-    "Shield Generator Pack": "SH-32 Shield Generator Pack",
-    "Gas Mine": "MD-8 Gas Mines",
-    "Gas Mines": "MD-8 Gas Mines",
-    "Machine Gun Sentry": "A/MG-43 Machine Gun Sentry",
-    "Gatling Sentry": "A/G-16 Gatling Sentry",
-    "Mortar Sentry": "A/M-12 Mortar Sentry",
-    "Guard Dog": "AX/AR-23 \"Guard Dog\"",
-    "Autocannon Sentry": "A/AC-8 Autocannon Sentry",
-    "Rocket Sentry": "A/MLS-4X Rocket Sentry",
-    "EMS Mortar Sentry": "A/M-23 EMS Mortar Sentry",
-    "Patriot Exosuit": "EXO-45 Patriot Exosuit",
-    "Emancipator Exosuit": "EXO-49 Emancipator Exosuit",
-    "Sterilizer": "TX-41 Sterilizer",
-    "Guard Dog Breath": "AX/TX-13 \"Guard Dog\" Dog Breath",
-    "Guard Dog Dog Breath": "AX/TX-13 \"Guard Dog\" Dog Breath",
-    "Directional Shield": "SH-51 Directional Shield",
-    "Anti-Tank Emplacement": "E/AT-12 Anti-Tank Emplacement",
-    "Flame Sentry": "A/FLAM-40 Flame Sentry",
-    "Portable Hellbomb": "B-100 Portable Hellbomb",
-    "Hellbomb Portable": "B-100 Portable Hellbomb",
-    "Hover Pack": "LIFT-860 Hover Pack",
-    "One True Flag": "CQC-1 One True Flag",
-    "De-Escalator": "GL-52 De-Escalator",
-    "Guard Dog K-9": "AX/ARC-3 \"Guard Dog\" K-9",
-    "Epoch": "PLAS-45 Epoch",
-    "Laser Sentry": "A/LAS-98 Laser Sentry",
-    "Warp Pack": "LIFT-182 Warp Pack",
-    "Speargun": "S-11 Speargun",
-    "Expendable Napalm": "EAT-700 Expendable Napalm",
-    "Solo Silo": "MS-11 Solo Silo",
-    "Maxigun": "M-1000 Maxigun",
-    "Defoliation Tool": "CQC-9 Defoliation Tool",
-    "Guard Dog Hot Dog": "AX/FLAM-75 \"Guard Dog\" Hot Dog",
-    "C4 Pack": "B/MD C4 Pack",
-    "Breaching Hammer": "CQC-20 Breaching Hammer",
-    "CQC-20": "CQC-20 Breaching Hammer",
-    "EAT-411": "EAT-411 Leveller",
-    "GL-28": "GL-28 Belt-Fed Grenade Launcher",
-    "Illumination Flare": "Orbital Illumination Flare",
-}
-
-class DownloadThread(QThread):
-    """Thread for downloading installer"""
-    progress = pyqtSignal(int, int)  # downloaded, total
-    finished = pyqtSignal(str)  # file path
-    error = pyqtSignal(str)  # error message
-    
-    def __init__(self, url, filename):
-        super().__init__()
-        self.url = url
-        self.filename = filename
-        self.cancelled = False
-    
-    def run(self):
-        try:
-            request = Request(self.url, headers={'User-Agent': 'HelldiversMacro-UpdateChecker'})
-            temp_dir = tempfile.gettempdir()
-            file_path = os.path.join(temp_dir, self.filename)
-            
-            with urlopen(request, timeout=30) as response:
-                total_size = int(response.headers.get('Content-Length', 0))
-                downloaded = 0
-                chunk_size = 8192
-                
-                with open(file_path, 'wb') as f:
-                    while not self.cancelled:
-                        chunk = response.read(chunk_size)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        self.progress.emit(downloaded, total_size)
-            
-            if not self.cancelled:
-                self.finished.emit(file_path)
-        except Exception as e:
-            self.error.emit(str(e))
-    
-    def cancel(self):
-        self.cancelled = True
-
-class SetupDialog(QDialog):
-    """Dialog for installing/updating the application"""
-    def __init__(self, update_info, parent=None):
-        super().__init__(parent)
-        self.update_info = update_info
-        self.installer_path = None
-        self.download_thread = None
-        self.is_app_installed = is_installed()
-        
-        self.setObjectName("setup_dialog")
-        self.setWindowTitle("Setup - Install Update")
-        self.setMinimumWidth(500)
-        self.setMinimumHeight(300)
-        
-        layout = QVBoxLayout(self)
-        layout.setSpacing(15)
-        
-        # Title
-        if self.is_app_installed:
-            title_text = f"Update to {update_info.get('tag_name', update_info['latest_version'])}"
-            desc_text = "The installer will be downloaded and launched to update your installation."
-        else:
-            title_text = f"Install {update_info.get('tag_name', update_info['latest_version'])}"
-            desc_text = "You are running the portable version. Install to get automatic updates."
-        
-        title = QLabel(title_text)
-        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        title.setStyleSheet("color: #3ddc84;")
-        layout.addWidget(title)
-        
-        desc = QLabel(desc_text)
-        desc.setWordWrap(True)
-        desc.setStyleSheet("color: #ccc; padding: 10px 0;")
-        layout.addWidget(desc)
-        
-        # Installation path (only for portable)
-        if not self.is_app_installed:
-            path_label = QLabel("Installation path:")
-            path_label.setStyleSheet("color: #ddd; margin-top: 10px;")
-            layout.addWidget(path_label)
-            
-            path_layout = QHBoxLayout()
-            self.path_input = QLineEdit()
-            default_path = os.path.join(os.environ.get('ProgramFiles', 'C:\\Program Files'), APP_NAME)
-            self.path_input.setText(default_path)
-            self.path_input.setStyleSheet("background: #1a1a1a; color: #ddd; padding: 5px; border: 1px solid #333;")
-            path_layout.addWidget(self.path_input)
-            
-            browse_btn = QPushButton("Browse...")
-            browse_btn.clicked.connect(self.browse_path)
-            path_layout.addWidget(browse_btn)
-            layout.addLayout(path_layout)
-        
-        # Progress bar
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setStyleSheet(
-            "QProgressBar { background: #1a1a1a; border: 1px solid #333; border-radius: 4px; text-align: center; color: #ddd; }"
-            "QProgressBar::chunk { background: #3ddc84; }"
-        )
-        self.progress_bar.setVisible(False)
-        layout.addWidget(self.progress_bar)
-        
-        # Status label
-        self.status_label = QLabel("")
-        self.status_label.setStyleSheet("color: #aaa; font-size: 11px;")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.status_label)
-        
-        layout.addStretch(1)
-        
-        # Buttons
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch(1)
-        
-        self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.clicked.connect(self.cancel_setup)
-        btn_layout.addWidget(self.cancel_btn)
-        
-        self.install_btn = QPushButton("Install" if not self.is_app_installed else "Update")
-        self.install_btn.setStyleSheet(
-            "background: #3ddc84; color: #000; font-weight: bold; "
-            "padding: 8px 20px; border-radius: 4px;"
-        )
-        self.install_btn.clicked.connect(self.start_installation)
-        btn_layout.addWidget(self.install_btn)
-        
-        layout.addLayout(btn_layout)
-    
-    def browse_path(self):
-        """Browse for installation directory"""
-        path = QFileDialog.getExistingDirectory(self, "Select Installation Directory")
-        if path:
-            self.path_input.setText(path)
-    
-    def start_installation(self):
-        """Download and run installer/update"""
-        # Find the appropriate asset for current installation type
-        download_url = self.update_info.get('download_url')
-        assets = self.update_info.get('assets', [])
-        current_install_type = get_install_type()
-        
-        # If update checker already provided a download URL, use it
-        # Otherwise, manually select based on install type
-        if not download_url:
-            if current_install_type == "installed":
-                # Look for setup executable
-                for asset in assets:
-                    name = asset.get('name', '').lower()
-                    if 'setup' in name and name.endswith('.exe'):
-                        download_url = asset.get('browser_download_url')
-                        break
-            else:
-                # Look for portable executable
-                for asset in assets:
-                    name = asset.get('name', '').lower()
-                    if 'portable' in name and name.endswith('.exe'):
-                        download_url = asset.get('browser_download_url')
-                        break
-        
-        # Fallback to any .exe asset if specific type not found
-        if not download_url:
-            for asset in assets:
-                name = asset.get('name', '').lower()
-                if name.endswith('.exe'):
-                    download_url = asset.get('browser_download_url')
-                    break
-        
-        # Final fallback: construct expected download URL
-        if not download_url:
-            tag_name = self.update_info.get('tag_name', self.update_info['latest_version'])
-            filename = get_installer_filename(tag_name)
-            download_url = f"https://github.com/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases/download/{tag_name}/{filename}"
-        
-        # Start download
-        self.install_btn.setEnabled(False)
-        self.progress_bar.setVisible(True)
-        self.status_label.setText("Downloading installer...")
-        
-        filename = os.path.basename(download_url.split('?')[0])  # Remove query params
-        self.download_thread = DownloadThread(download_url, filename)
-        self.download_thread.progress.connect(self.update_progress)
-        self.download_thread.finished.connect(self.run_installer)
-        self.download_thread.error.connect(self.download_error)
-        self.download_thread.start()
-    
-    def update_progress(self, downloaded, total):
-        """Update download progress"""
-        if total > 0:
-            percent = int((downloaded / total) * 100)
-            self.progress_bar.setValue(percent)
-            mb_downloaded = downloaded / (1024 * 1024)
-            mb_total = total / (1024 * 1024)
-            self.status_label.setText(f"Downloading: {mb_downloaded:.1f} MB / {mb_total:.1f} MB")
-    
-    def run_installer(self, file_path):
-        """Run the downloaded installer"""
-        self.installer_path = file_path
-        self.status_label.setText("Download complete! Launching installer...")
-        self.progress_bar.setValue(100)
-        
-        try:
-            # Prepare installer arguments
-            if self.is_app_installed:
-                # Silent update (or with minimal UI)
-                subprocess.Popen([file_path, '/SILENT'])
-            else:
-                # Install to custom directory
-                install_dir = self.path_input.text()
-                subprocess.Popen([file_path, f'/DIR="{install_dir}"'])
-            
-            QMessageBox.information(
-                self, "Installer Launched",
-                "The installer has been launched. This application will now close.\n\n"
-                "Please complete the installation and restart the application."
-            )
-            
-            # Close the application
-            self.accept()
-            QApplication.quit()
-            
-        except Exception as e:
-            self.download_error(f"Failed to launch installer: {str(e)}")
-    
-    def download_error(self, error_msg):
-        """Handle download error"""
-        self.install_btn.setEnabled(True)
-        self.progress_bar.setVisible(False)
-        self.status_label.setText("")
-        
-        QMessageBox.warning(
-            self, "Download Failed",
-            f"Failed to download installer:\n{error_msg}\n\n"
-            "Please download manually from GitHub."
-        )
-    
-    def cancel_setup(self):
-        """Cancel installation"""
-        if self.download_thread and self.download_thread.isRunning():
-            self.download_thread.cancel()
-            self.download_thread.wait()
-        self.reject()
-
-class UpdateDialog(QDialog):
-    def __init__(self, update_info, parent=None):
-        super().__init__(parent)
-        self.update_info = update_info
-        self.setObjectName("update_dialog")
-        self.setWindowTitle("Update Available")
-        self.setMinimumWidth(500)
-        self.setMinimumHeight(400)
-        
-        layout = QVBoxLayout(self)
-        layout.setSpacing(12)
-        
-        # Title with clickable link
-        title = QLabel(f"New version available: <a href=\"{update_info['release_url']}\" style=\"color: #3ddc84; text-decoration: none;\">{update_info.get('tag_name', update_info['latest_version'])}</a>")
-        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        title.setStyleSheet("color: #3ddc84; padding: 10px;")
-        title.setOpenExternalLinks(True)
-        title.setTextFormat(Qt.TextFormat.RichText)
-        layout.addWidget(title)
-        
-        # Version info
-        version_info = QLabel(
-            f"Current version: {update_info['current_version']}\n"
-            f"Latest version: {update_info.get('tag_name', update_info['latest_version'])}"
-        )
-        version_info.setStyleSheet("color: #ddd; padding: 5px;")
-        layout.addWidget(version_info)
-        
-        # Release notes
-        notes_label = QLabel("Release Notes:")
-        notes_label.setFont(QFont("Arial", 11, QFont.Weight.Bold))
-        notes_label.setStyleSheet("color: #ddd; margin-top: 10px;")
-        layout.addWidget(notes_label)
-        
-        notes_browser = QTextBrowser()
-        notes_browser.setObjectName("release_notes")
-        notes_browser.setOpenExternalLinks(True)
-        notes_browser.setMarkdown(update_info['release_notes'])
-        notes_browser.setStyleSheet(
-            "background: #1a1a1a; color: #ccc; border: 1px solid #333; "
-            "padding: 8px; border-radius: 4px;"
-        )
-        layout.addWidget(notes_browser)
-        
-        # Buttons
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch(1)
-        
-        skip_btn = QPushButton("Skip This Version")
-        skip_btn.setObjectName("update_skip")
-        skip_btn.clicked.connect(self.skip_version)
-        btn_layout.addWidget(skip_btn)
-        
-        later_btn = QPushButton("Later")
-        later_btn.setObjectName("update_later")
-        later_btn.clicked.connect(self.reject)
-        btn_layout.addWidget(later_btn)
-        
-        # Show Install/Update button or just Download for browser
-        is_app_installed = is_installed()
-        if is_app_installed:
-            install_btn = QPushButton("Install Update")
-        else:
-            install_btn = QPushButton("Install")
-        
-        install_btn.setObjectName("update_install")
-        install_btn.setStyleSheet(
-            "background: #3ddc84; color: #000; font-weight: bold; "
-            "padding: 8px 20px; border-radius: 4px;"
-        )
-        install_btn.clicked.connect(self.show_setup)
-        btn_layout.addWidget(install_btn)
-        
-        # Manual download button
-        download_btn = QPushButton("Download Only")
-        download_btn.setObjectName("update_download")
-        download_btn.setToolTip("Download installer manually")
-        download_btn.clicked.connect(self.download_update)
-        btn_layout.addWidget(download_btn)
-        
-        layout.addLayout(btn_layout)
-    
-    def show_setup(self):
-        """Show setup dialog to install/update"""
-        self.hide()
-        setup_dlg = SetupDialog(self.update_info, self.parent())
-        result = setup_dlg.exec()
-        if result == QDialog.DialogCode.Rejected:
-            self.show()  # Show update dialog again if setup was cancelled
-        else:
-            self.accept()  # Close update dialog if setup proceeded
-    
-    def download_update(self):
-        """Open download URL in browser"""
-        url = self.update_info.get('download_url', self.update_info.get('release_url', ''))
-        if url:
-            webbrowser.open(url)
-        self.accept()
-    
-    def skip_version(self):
-        """Mark this version as skipped"""
-        if self.parent():
-            self.parent().global_settings['skipped_version'] = self.update_info.get('tag_name', self.update_info['latest_version'])
-            self.parent().save_global_settings()
-        self.reject()
-
-
-class TestEnvironment(QDialog):
-    def __init__(self):
-        super().__init__()
-        self.setObjectName("test_env")
-        self.setWindowTitle("Super Earth Training Simulator")
-        layout = QVBoxLayout(self)
-        self.key_label = QLabel("SYSTEM ACTIVE - TEST MACROS")
-        self.key_label.setObjectName("test_key")
-        self.key_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.name_label = QLabel("Waiting for input...")
-        self.name_label.setFont(QFont("Arial", 16, QFont.Weight.Bold))
-        self.name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.arrow_display = QLabel("")
-        self.arrow_display.setFont(QFont("Arial", 35))
-        self.arrow_display.setObjectName("test_arrow")
-        self.arrow_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.key_label)
-        layout.addWidget(self.name_label)
-        layout.addWidget(self.arrow_display)
-        comm.update_test_display.connect(self.display_macro)
-
-    def display_macro(self, name, sequence, key_label):
-        self.key_label.setText(f"HOTKEY TRIGGERED: [ {key_label} ]")
-        self.name_label.setText(f"EXECUTING: {name.upper()}")
-        icons = {"up": "↑", "down": "↓", "left": "←", "right": "→"}
-        visual_seq = " ".join([icons.get(m, m) for m in sequence])
-        self.arrow_display.setText(visual_seq)
-
-
-class SettingsDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("settings_dialog")
-        self.parent_app = parent
-        self.setWindowTitle("Latency Settings")
-        layout = QVBoxLayout(self)
-
-        label = QLabel("Latency (ms)")
-        label.setObjectName("settings_label")
-        layout.addWidget(label)
-
-        row = QHBoxLayout()
-        self.slider = QSlider(Qt.Orientation.Horizontal)
-        self.slider.setObjectName("settings_slider")
-        self.slider.setRange(1, 200)
-        self.spin = QSpinBox()
-        self.spin.setRange(1, 200)
-
-        # initialize from parent if available
-        if self.parent_app:
-            val = self.parent_app.speed_slider.value()
-        else:
-            val = 20
-        self.slider.setValue(val)
-        self.spin.setValue(val)
-
-        self.slider.valueChanged.connect(self.spin.setValue)
-        self.spin.valueChanged.connect(self.slider.setValue)
-
-        row.addWidget(self.slider)
-        row.addWidget(self.spin)
-        layout.addLayout(row)
-
-        btn_row = QHBoxLayout()
-        apply_btn = QPushButton("Apply")
-        apply_btn.setObjectName("settings_apply")
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.setObjectName("settings_cancel")
-        apply_btn.clicked.connect(self.apply_and_close)
-        cancel_btn.clicked.connect(self.reject)
-        btn_row.addStretch(1)
-        btn_row.addWidget(cancel_btn)
-        btn_row.addWidget(apply_btn)
-        layout.addLayout(btn_row)
-
-    def apply_and_close(self):
-        if self.parent_app:
-            self.parent_app.speed_slider.setValue(self.spin.value())
-            self.parent_app.update_speed_label(self.spin.value())
-        self.accept()
-
-
-class SettingsWindow(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.parent_app = parent
-        self.setWindowTitle("Settings")
-        self.setFixedSize(600, 400)
-        self.setObjectName("settings_window")
-        
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-        
-        content_layout = QHBoxLayout()
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(0)
-        
-        # Left sidebar with tabs
-        self.tab_list = QListWidget()
-        self.tab_list.setObjectName("settings_tab_list")
-        self.tab_list.setFixedWidth(120)
-        self.tab_list.setStyleSheet("background: #0a0a0a; border-right: 1px solid #333;")
-        self.tab_list.addItem("Latency")
-        self.tab_list.addItem("Controls")
-        self.tab_list.addItem("Autoload")
-        self.tab_list.addItem("Notifications")
-        self.tab_list.addItem("Appearance")
-        self.tab_list.addItem("Windows")
-        self.tab_list.itemClicked.connect(self.switch_tab)
-        content_layout.addWidget(self.tab_list)
-        
-        # Right content area
-        self.content_stack = QStackedWidget()
-        self.content_stack.setObjectName("settings_content")
-        
-        # ===== LATENCY TAB =====
-        latency_widget = QWidget()
-        latency_layout = QVBoxLayout(latency_widget)
-        
-        label = QLabel("Latency (ms)")
-        label.setObjectName("settings_label")
-        latency_layout.addWidget(label)
-        
-        row = QHBoxLayout()
-        self.slider = QSlider(Qt.Orientation.Horizontal)
-        self.slider.setObjectName("settings_slider")
-        self.slider.setRange(1, 200)
-        self.spin = QSpinBox()
-        self.spin.setRange(1, 200)
-        
-        if self.parent_app:
-            val = self.parent_app.global_settings.get("latency", 20)
-        else:
-            val = 20
-        self.slider.setValue(val)
-        self.spin.setValue(val)
-        
-        self.slider.valueChanged.connect(self.spin.setValue)
-        self.spin.valueChanged.connect(self.slider.setValue)
-        
-        row.addWidget(self.slider)
-        row.addWidget(self.spin)
-        latency_layout.addLayout(row)
-        
-        # Add description
-        desc_label = QLabel("Latency controls the delay (in milliseconds) between each keypress\nwhen executing stratagems. Lower values = faster execution, higher values = more reliable on high-ping servers.\nRecommended between 20ms and 30ms.")
-        desc_label.setObjectName("settings_description")
-        desc_label.setWordWrap(True)
-        desc_label.setStyleSheet("color: #aaa; font-size: 11px; margin-top: 10px;")
-        latency_layout.addWidget(desc_label)
-        
-        latency_layout.addStretch(1)
-        self.content_stack.addWidget(latency_widget)
-        
-        # ===== CONTROLS TAB =====
-        controls_widget = QWidget()
-        controls_layout = QVBoxLayout(controls_widget)
-        
-        controls_label = QLabel("Stratagem Controls")
-        controls_label.setObjectName("settings_label")
-        controls_layout.addWidget(controls_label)
-        
-        keys_label = QLabel("Key Binding:")
-        keys_label.setStyleSheet("color: #ddd; padding-top: 8px;")
-        controls_layout.addWidget(keys_label)
-        
-        self.keybind_combo = QComboBox()
-        self.keybind_combo.setStyleSheet("background: #1a1a1a; color: #ddd; border: 1px solid #333; padding: 4px;")
-        self.keybind_combo.addItem("Arrow Keys (Recommended)")
-        self.keybind_combo.addItem("WASD Keys")
-        if self.parent_app:
-            keybind_mode = self.parent_app.global_settings.get("keybind_mode", "arrows")
-            if keybind_mode == "wasd":
-                self.keybind_combo.setCurrentIndex(1)
-            else:
-                self.keybind_combo.setCurrentIndex(0)
-        controls_layout.addWidget(self.keybind_combo)
-        
-        controls_desc = QLabel("Choose which keys to use for executing stratagems.\nArrow Keys (Recommended): Uses ↑↓←→ for stratagem inputs.\nWASD: Uses W/A/S/D keys for stratagem inputs.")
-        controls_desc.setObjectName("settings_description")
-        controls_desc.setWordWrap(True)
-        controls_desc.setStyleSheet("color: #aaa; font-size: 11px; margin-top: 10px;")
-        controls_layout.addWidget(controls_desc)
-        
-        controls_layout.addStretch(1)
-        self.content_stack.addWidget(controls_widget)
-        
-        # ===== AUTOLOAD TAB =====
-        autoload_widget = QWidget()
-        autoload_layout = QVBoxLayout(autoload_widget)
-        
-        autoload_label = QLabel("Profile Autoload")
-        autoload_label.setObjectName("settings_label")
-        autoload_layout.addWidget(autoload_label)
-        
-        self.autoload_check = QCheckBox("Auto-load last profile on startup")
-        self.autoload_check.setStyleSheet("color: #ddd; padding: 8px;")
-        if self.parent_app:
-            self.autoload_check.setChecked(self.parent_app.global_settings.get("autoload_profile", False))
-        autoload_layout.addWidget(self.autoload_check)
-        
-        autoload_desc = QLabel("When enabled, the application will automatically load the last profile you were using when it starts up.")
-        autoload_desc.setObjectName("settings_description")
-        autoload_desc.setWordWrap(True)
-        autoload_desc.setStyleSheet("color: #aaa; font-size: 11px; margin-top: 10px;")
-        autoload_layout.addWidget(autoload_desc)
-        
-        autoload_layout.addStretch(1)
-        self.content_stack.addWidget(autoload_widget)
-        
-        # ===== NOTIFICATIONS TAB =====
-        notif_widget = QWidget()
-        notif_layout = QVBoxLayout(notif_widget)
-        
-        notif_label = QLabel("Notifications")
-        notif_label.setObjectName("settings_label")
-        notif_layout.addWidget(notif_label)
-        
-        self.sound_check = QCheckBox("Enable sound notifications")
-        self.sound_check.setStyleSheet("color: #ddd; padding: 8px;")
-        if self.parent_app:
-            self.sound_check.setChecked(self.parent_app.global_settings.get("sound_enabled", False))
-        notif_layout.addWidget(self.sound_check)
-        
-        self.visual_check = QCheckBox("Enable visual notifications")
-        self.visual_check.setStyleSheet("color: #ddd; padding: 8px;")
-        if self.parent_app:
-            self.visual_check.setChecked(self.parent_app.global_settings.get("visual_enabled", True))
-        notif_layout.addWidget(self.visual_check)
-        
-        notif_desc = QLabel("Show notifications when macro execution completes successfully.\nSound notifications play a beep when enabled.")
-        notif_desc.setObjectName("settings_description")
-        notif_desc.setWordWrap(True)
-        notif_desc.setStyleSheet("color: #aaa; font-size: 11px; margin-top: 10px;")
-        notif_layout.addWidget(notif_desc)
-        
-        notif_layout.addStretch(1)
-        self.content_stack.addWidget(notif_widget)
-        
-        # ===== APPEARANCE TAB =====
-        appear_widget = QWidget()
-        appear_layout = QVBoxLayout(appear_widget)
-        
-        appear_label = QLabel("Appearance")
-        appear_label.setObjectName("settings_label")
-        appear_layout.addWidget(appear_label)
-        
-        theme_label = QLabel("Theme:")
-        theme_label.setStyleSheet("color: #ddd; padding-top: 8px;")
-        appear_layout.addWidget(theme_label)
-        
-        self.theme_combo = QComboBox()
-        self.theme_combo.setStyleSheet("background: #1a1a1a; color: #ddd; border: 1px solid #333; padding: 4px;")
-        self.theme_combo.addItems(["Dark (Default)", "Dark with Blue Accent", "Dark with Red Accent"])
-        if self.parent_app:
-            theme = self.parent_app.global_settings.get("theme", "Dark (Default)")
-            idx = self.theme_combo.findText(theme)
-            if idx >= 0:
-                self.theme_combo.setCurrentIndex(idx)
-        appear_layout.addWidget(self.theme_combo)
-        
-        appear_desc = QLabel("Select the color theme for the application. Changes apply immediately.")
-        appear_desc.setObjectName("settings_description")
-        appear_desc.setWordWrap(True)
-        appear_desc.setStyleSheet("color: #aaa; font-size: 11px; margin-top: 10px;")
-        appear_layout.addWidget(appear_desc)
-        
-        appear_layout.addStretch(1)
-        self.content_stack.addWidget(appear_widget)
-        
-        # ===== WINDOWS TAB =====
-        windows_widget = QWidget()
-        windows_layout = QVBoxLayout(windows_widget)
-        
-        windows_label = QLabel("Window Settings")
-        windows_label.setObjectName("settings_label")
-        windows_layout.addWidget(windows_label)
-        
-        # Update checking
-        updates_section = QLabel("Updates")
-        updates_section.setStyleSheet("color: #ddd; font-weight: bold; padding-top: 15px;")
-        windows_layout.addWidget(updates_section)
-        
-        self.auto_update_check = QCheckBox("Check for updates on startup")
-        self.auto_update_check.setStyleSheet("color: #ddd; padding: 8px;")
-        if self.parent_app:
-            self.auto_update_check.setChecked(self.parent_app.global_settings.get("auto_check_updates", True))
-        windows_layout.addWidget(self.auto_update_check)
-        
-        check_now_btn = QPushButton("Check for Updates Now")
-        check_now_btn.setStyleSheet(
-            "background: #2a2a2a; color: #3ddc84; border: 1px solid #3ddc84; "
-            "padding: 8px 16px; border-radius: 4px; font-weight: bold;"
-        )
-        check_now_btn.clicked.connect(self.check_for_updates)
-        windows_layout.addWidget(check_now_btn)
-        
-        version_label = QLabel(f"Current Version: {VERSION}")
-        version_label.setStyleSheet("color: #888; font-size: 10px; padding: 5px;")
-        windows_layout.addWidget(version_label)
-        
-        update_desc = QLabel("Automatically check for new versions when the application starts.")
-        update_desc.setObjectName("settings_description")
-        update_desc.setWordWrap(True)
-        update_desc.setStyleSheet("color: #aaa; font-size: 11px; margin-top: 10px;")
-        windows_layout.addWidget(update_desc)
-        
-        # Separator
-        windows_layout.addSpacing(15)
-        
-        self.minimize_tray_check = QCheckBox("Minimize to system tray on close")
-        self.minimize_tray_check.setStyleSheet("color: #ddd; padding: 8px;")
-        if self.parent_app:
-            self.minimize_tray_check.setChecked(self.parent_app.global_settings.get("minimize_to_tray", False))
-        windows_layout.addWidget(self.minimize_tray_check)
-        
-        windows_desc = QLabel("When enabled, closing the window minimizes the application to the system tray.\nWhen disabled, closing the window exits the application.")
-        windows_desc.setObjectName("settings_description")
-        windows_desc.setWordWrap(True)
-        windows_desc.setStyleSheet("color: #aaa; font-size: 11px; margin-top: 10px;")
-        windows_layout.addWidget(windows_desc)
-        
-        # Admin privileges checkbox
-        self.require_admin_check = QCheckBox("Require administrator privileges")
-        self.require_admin_check.setStyleSheet("color: #ddd; padding: 8px; margin-top: 15px;")
-        if self.parent_app:
-            self.require_admin_check.setChecked(self.parent_app.global_settings.get("require_admin", False))
-        windows_layout.addWidget(self.require_admin_check)
-        
-        admin_desc = QLabel("When enabled, the application will request administrator privileges on startup.\nThis is required if Helldivers 2 runs with admin rights. Application will restart to apply changes.")
-        admin_desc.setObjectName("settings_description")
-        admin_desc.setWordWrap(True)
-        admin_desc.setStyleSheet("color: #aaa; font-size: 11px; margin-top: 10px;")
-        windows_layout.addWidget(admin_desc)
-        
-        windows_layout.addStretch(1)
-        self.content_stack.addWidget(windows_widget)
-        
-        content_layout.addWidget(self.content_stack)
-        
-        main_layout.addLayout(content_layout)
-        
-        # Bottom buttons
-        btn_row = QHBoxLayout()
-        
-        # Version label on the left (clickable link to releases)
-        version_label = QLabel(f'<a href="https://github.com/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases" style="color: #666; text-decoration: none;">{VERSION}</a>')
-        version_label.setStyleSheet("color: #666; font-size: 10px; padding: 0 10px;")
-        version_label.setOpenExternalLinks(True)
-        version_label.setTextFormat(Qt.TextFormat.RichText)
-        version_label.setToolTip("View releases on GitHub")
-        btn_row.addWidget(version_label)
-        
-        btn_row.addStretch(1)
-        
-        apply_btn = QPushButton("Apply")
-        apply_btn.setObjectName("settings_apply")
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.setObjectName("settings_cancel")
-        apply_btn.clicked.connect(self.apply_and_close)
-        cancel_btn.clicked.connect(self.reject)
-        btn_row.addWidget(cancel_btn)
-        btn_row.addWidget(apply_btn)
-        
-        main_layout.addLayout(btn_row)
-    
-    def switch_tab(self, item):
-        self.content_stack.setCurrentIndex(self.tab_list.row(item))
-    
-    def check_for_updates(self):
-        """Check for updates manually"""
-        # Show checking message
-        self.sender().setEnabled(False)
-        self.sender().setText("Checking...")
-        QApplication.processEvents()
-        
-        result = update_checker.check_for_updates(
-            VERSION, GITHUB_REPO_OWNER, GITHUB_REPO_NAME, 
-            install_type=get_install_type()
-        )
-        
-        self.sender().setEnabled(True)
-        self.sender().setText("Check for Updates Now")
-        
-        if not result['success']:
-            QMessageBox.warning(
-                self, "Update Check Failed",
-                f"Could not check for updates:\n{result['error']}"
-            )
-            return
-        
-        if result['has_update']:
-            dlg = UpdateDialog(result, self.parent_app)
-            dlg.exec()
-        else:
-            QMessageBox.information(
-                self, "No Updates",
-                f"You are running the latest version ({VERSION})."
-            )
-    
-    def apply_and_close(self):
-        if self.parent_app:
-            # Save all settings
-            latency_value = self.spin.value()
-            old_theme = self.parent_app.global_settings.get("theme", "Dark (Default)")
-            new_theme = self.theme_combo.currentText()
-            old_require_admin = self.parent_app.global_settings.get("require_admin", False)
-            new_require_admin = self.require_admin_check.isChecked()
-            
-            self.parent_app.speed_slider.setValue(latency_value)
-            keybind_mode = "arrows" if self.keybind_combo.currentIndex() == 0 else "wasd"
-            
-            self.parent_app.global_settings["latency"] = latency_value
-            self.parent_app.global_settings["keybind_mode"] = keybind_mode
-            self.parent_app.global_settings["autoload_profile"] = self.autoload_check.isChecked()
-            self.parent_app.global_settings["sound_enabled"] = self.sound_check.isChecked()
-            self.parent_app.global_settings["visual_enabled"] = self.visual_check.isChecked()
-            self.parent_app.global_settings["theme"] = new_theme
-            self.parent_app.global_settings["minimize_to_tray"] = self.minimize_tray_check.isChecked()
-            self.parent_app.global_settings["require_admin"] = new_require_admin
-            self.parent_app.global_settings["auto_check_updates"] = self.auto_update_check.isChecked()
-            self.parent_app.save_global_settings()
-            self.parent_app.update_speed_label(latency_value)
-            
-            # Apply theme immediately if changed
-            if old_theme != new_theme:
-                self.parent_app.apply_theme(new_theme)
-            
-            # Handle admin privilege change
-            if old_require_admin != new_require_admin:
-                if new_require_admin and not is_admin():
-                    # Need admin but not running as admin - restart with admin
-                    reply = QMessageBox.question(self, "Restart Required",
-                        "Application needs to restart with administrator privileges.\nRestart now?",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                    if reply == QMessageBox.StandardButton.Yes:
-                        self.accept()
-                        if run_as_admin():
-                            QApplication.quit()
-                        else:
-                            QMessageBox.warning(self, "Error", "Failed to elevate privileges. Please run as administrator manually.")
-                        return
-                elif not new_require_admin and is_admin():
-                    # No longer need admin but running as admin - inform user
-                    QMessageBox.information(self, "Restart Recommended",
-                        "To run without administrator privileges, please restart the application normally.")
-        self.accept()
-
-
-class DraggableIcon(QWidget):
-    def __init__(self, name):
-        super().__init__()
-        self.name = name
-        self.setProperty("role", "icon")
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(5, 5, 5, 5)
-        self.svg_view = QSvgWidget()
-        path = find_svg_path(name)
-        if path: self.svg_view.load(path)
-        layout.addWidget(self.svg_view)
-        self.setToolTip(name)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            drag = QDrag(self)
-            mime = QMimeData()
-            mime.setText(self.name)
-            mime.setData("source", b"sidebar")
-            drag.setMimeData(mime)
-            drag.setPixmap(self.grab())
-            drag.exec(Qt.DropAction.MoveAction)
-
-class NumpadSlot(QWidget):
-    def __init__(self, scan_code, label_text, parent_app):
-        super().__init__()
-        self.scan_code = int(scan_code)
-        self.label_text = label_text
-        self.parent_app = parent_app
-        self.assigned_stratagem = None
-        self.setProperty("role", "numpad-slot")
-        self.setAcceptDrops(True)
-        self.layout = QVBoxLayout(self)
-        self.label = QLabel(label_text)
-        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.layout.addWidget(self.label)
-        self.svg_display = QSvgWidget()
-        self.layout.addWidget(self.svg_display, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.svg_display.hide()
-        self.update_style(False)
-
-    def update_style(self, assigned):
-        border_style, color, bg = ("solid", "#ffcc00", "#151515") if assigned else ("dashed", "#444", "#0a0a0a")
-        self.setCursor(Qt.CursorShape.PointingHandCursor if assigned else Qt.CursorShape.ArrowCursor)
-        self.setStyleSheet(f"QWidget {{ border: 2px {border_style} {color}; background: {bg}; color: #888; border-radius: 8px; font-weight: bold; }} QWidget:hover {{ border: 2px solid {'#ff4444' if assigned else '#ffcc00'}; background: {'#201010' if assigned else '#151515'}; }}")
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.RightButton:
-            if self.assigned_stratagem:
-                self.clear_slot()
-            return
-
-        if event.button() == Qt.MouseButton.LeftButton:
-            if self.assigned_stratagem:
-                drag = QDrag(self)
-                mime = QMimeData()
-                mime.setText(self.assigned_stratagem)
-                mime.setData("source_slot", str(self.scan_code).encode())
-                drag.setMimeData(mime)
-                drag.setPixmap(self.grab())
-                drag.exec(Qt.DropAction.MoveAction)
-            
-    def mouseDoubleClickEvent(self, event):
-        event.ignore()
-
-    def dragEnterEvent(self, event):
-        event.accept()
-
-    def dropEvent(self, event):
-        incoming_strat = event.mimeData().text()
-        source_slot_code = event.mimeData().data("source_slot").data().decode()
-
-        if source_slot_code:
-            source_slot = self.parent_app.slots.get(source_slot_code)
-            if source_slot and source_slot != self:
-                # SWAP LOGIC: Move destination content to source slot
-                existing_strat = self.assigned_stratagem
-                if existing_strat:
-                    source_slot.assign(existing_strat)
-                else:
-                    source_slot.clear_slot()
-                
-                # Assign incoming to this slot
-                self.assign(incoming_strat)
-        else:
-            # Dropping from sidebar (overwrite)
-            self.assign(incoming_strat)
-            
-        event.accept()
-
-    def clear_slot(self):
-        self.assigned_stratagem = None
-        self.svg_display.hide()
-        self.label.show()
-        self.update_style(False)
-        self.parent_app.on_change()  # Trigger change detection
-
-    def assign(self, strat_name):
-        self.assigned_stratagem = strat_name
-        path = find_svg_path(strat_name)
-        if path:
-            self.label.hide()
-            self.svg_display.load(path)
-            self.svg_display.show()
-            self.update_style(True)
-        self.parent_app.on_change()  # Trigger change detection
-
-    def run_macro(self, name, sequence, key_label):
-        comm.update_test_display.emit(name, sequence, key_label)
-        delay = self.parent_app.speed_slider.value() / 1000.0
-        for move in sequence:
-            actual_key = self.parent_app.map_direction_to_key(move)
-            keyboard.press(actual_key)
-            time.sleep(delay) 
-            keyboard.release(actual_key)
-            time.sleep(delay)
-        
-        # Add notifications after macro executes
-        if self.parent_app.global_settings.get("sound_enabled", True):
-            try:
-                winsound.Beep(1000, 200)  # 1000Hz for 200ms
-            except:
-                pass
-        
-        if self.parent_app.global_settings.get("visual_enabled", True):
-            self.parent_app.show_status(f"✓ {name} executed", 1500)
 
 class StratagemApp(QMainWindow):
+    """Main application window for Helldivers 2 Numpad Commander"""
+    
     def __init__(self):
         super().__init__()
         self.slots = {}
-        self.setWindowTitle("Helldivers 2 - Numpad Commander")
-        self.global_settings = {}
-        self.saved_state = None  # Track the last saved state
-        self.undo_btn = None  # Will be set in initUI
-        self.load_global_settings()
+        self.setWindowTitle(f"{APP_NAME} - Numpad Commander")
+        self.global_settings = load_settings()
+        self.saved_state = None
+        self.undo_btn = None
+        self.save_btn = None
+        
+        self.macro_engine = MacroEngine(
+            lambda: self.slots,
+            lambda: self.global_settings,
+            self.map_direction_to_key
+        )
+        
         self.initUI()
         self.refresh_profiles()
-        self.setup_tray()
-        # Autoload profile if enabled
-        if self.global_settings.get("autoload_profile", False):
-            last_profile = self.global_settings.get("last_profile", None)
-            if last_profile and last_profile != "Create new profile":
-                idx = self.profile_box.findText(last_profile)
-                if idx >= 0:
-                    self.profile_box.setCurrentIndex(idx)
         
-        # Check for updates on startup if enabled
+        self.tray_manager = TrayManager(
+            self.app_icon if hasattr(self, 'app_icon') and self.app_icon else None
+        )
+        self.tray_manager.toggle_macros.connect(self.set_macros_enabled)
+        self.tray_manager.show_window.connect(self._show_window)
+        self.tray_manager.quit_app.connect(self.quit_application)
+        self.tray_manager.setup()
+        
+        self._autoload_last_profile()
+        
         if self.global_settings.get("auto_check_updates", True):
             QTimer.singleShot(1000, self.check_for_updates_startup)
 
     def initUI(self):
+        """Initialize the user interface"""
         self.setObjectName("main_window")
         self.setWindowTitle(f"{APP_NAME} {VERSION}")
-        # Apply theme-based stylesheet
+        
+        # Apply theme
         theme_name = self.global_settings.get("theme", "Dark (Default)")
         self.apply_theme(theme_name)
-
-        # Load icon from assets
-        try:
-            icon_path = os.path.join(os.path.dirname(__file__), "assets", "icon.ico")
-            if os.path.exists(icon_path):
-                app_icon = QIcon(icon_path)
-                self.setWindowIcon(app_icon)
-                self.app_icon = app_icon
-            else:
-                self.app_icon = None
-        except Exception:
-            self.app_icon = None
-
-        # Central widget with main layout
+        
+        self._load_app_icon()
+        
         central_widget = QWidget()
         main_vbox = QVBoxLayout(central_widget)
         main_vbox.setContentsMargins(0, 0, 0, 0)
         main_vbox.setSpacing(0)
         self.setCentralWidget(central_widget)
+        
+        self._create_top_bar(main_vbox)
+        self._create_status_label(main_vbox)
+        self._create_main_content(main_vbox)
+        self._create_bottom_bar(main_vbox)
+        
+        self.setMinimumWidth(900)
 
-        # Top bar with menu and controls
+    def _load_app_icon(self):
+        """Load application icon"""
+        try:
+            icon_path = os.path.join(os.path.dirname(__file__), ASSETS_DIR, "icon.ico")
+            if os.path.exists(icon_path):
+                self.app_icon = QIcon(icon_path)
+                self.setWindowIcon(self.app_icon)
+            else:
+                self.app_icon = None
+        except Exception:
+            self.app_icon = None
+
+    def _create_top_bar(self, main_layout):
+        """Create top bar with settings and profile controls"""
         top_bar = QWidget()
         top_bar.setObjectName("top_bar")
         top_bar_layout = QHBoxLayout(top_bar)
         top_bar_layout.setContentsMargins(8, 6, 8, 6)
         top_bar_layout.setSpacing(8)
         
-        # Left sidebar: Settings and Latency (vertical)
         left_sidebar = QVBoxLayout()
         left_sidebar.setContentsMargins(8, 8, 0, 8)
         
-        # Settings button
         settings_btn = QPushButton("⚙ Settings")
         settings_btn.setObjectName("menu_button")
         settings_btn.setMaximumWidth(100)
         settings_btn.clicked.connect(self.open_settings)
         left_sidebar.addWidget(settings_btn)
         
-        # Latency info
-        self.speed_btn = QPushButton("Latency:")
-        self.speed_btn.setText(f"Latency: {self.global_settings.get('latency', 20)}ms")
+        self.speed_btn = QPushButton(f"Latency: {self.global_settings.get('latency', 20)}ms")
         self.speed_btn.setObjectName("speed_btn")
         self.speed_btn.clicked.connect(self.open_settings)
+        
         self.speed_slider = QSlider(Qt.Orientation.Horizontal)
         self.speed_slider.setObjectName("speed_slider")
         self.speed_slider.setRange(1, 200)
         self.speed_slider.setValue(self.global_settings.get("latency", 20))
         self.speed_slider.valueChanged.connect(self.update_speed_label)
-        self.speed_slider.valueChanged.connect(self.on_change)  # Track changes
-        # keep the slider around for logic but hide it from the toolbar; settings dialog will control it
+        self.speed_slider.valueChanged.connect(self.on_change)
         self.speed_slider.setVisible(False)
+        
         left_sidebar.addWidget(self.speed_btn)
-
         top_bar_layout.addLayout(left_sidebar)
-
-
-        # Right sidebar: Profile Select and Action Buttons (vertical)
+        
         right_sidebar = QVBoxLayout()
         right_sidebar.setContentsMargins(0, 8, 8, 8)
         
-        # Profile select
         self.profile_box = QComboBox()
         self.profile_box.setObjectName("profile_box_styled")
         self.profile_box.currentIndexChanged.connect(self.profile_changed)
         right_sidebar.addWidget(self.profile_box)
         
-        # Action buttons
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(6)
-        self.undo_btn = QPushButton("↶")  # Undo button
-        btn_save, btn_test, btn_clear = QPushButton("💾"), QPushButton("🧪"), QPushButton("🗑️")
-        self.save_btn = btn_save
-        for btn, tip in zip([self.undo_btn, btn_save, btn_test, btn_clear], ["Undo Changes", "Save Profile", "Test Mode", "Clear"]):
-            btn.setToolTip(tip)
-            btn.setProperty("role", "action")
-            btn.setStyleSheet(btn.styleSheet())  # Ensure styling is applied
-            btn_layout.addWidget(btn)
-
-        self.undo_btn.clicked.connect(self.undo_changes)
-        btn_save.clicked.connect(self.manual_save)
-        btn_test.clicked.connect(lambda: TestEnvironment().exec())
-        btn_clear.clicked.connect(self.confirm_clear)
-        self.update_undo_state()  # Initialize undo button state
-        right_sidebar.addLayout(btn_layout)
         
+        self.undo_btn = QPushButton("↶")
+        self.save_btn = QPushButton("💾")
+        btn_test = QPushButton("🧪")
+        btn_clear = QPushButton("🗑️")
+        
+        buttons = [
+            (self.undo_btn, "Undo Changes", self.undo_changes),
+            (self.save_btn, "Save Profile", self.manual_save),
+            (btn_test, "Test Mode", lambda: TestEnvironment().exec()),
+            (btn_clear, "Clear", self.confirm_clear)
+        ]
+        
+        for btn, tooltip, handler in buttons:
+            btn.setToolTip(tooltip)
+            btn.setProperty("role", "action")
+            btn.clicked.connect(handler)
+            btn_layout.addWidget(btn)
+        
+        self.update_undo_state()
+        right_sidebar.addLayout(btn_layout)
         top_bar_layout.addLayout(right_sidebar)
-        main_vbox.addWidget(top_bar)
+        main_layout.addWidget(top_bar)
 
-        # Status messages between top bar and content
+    def _create_status_label(self, main_layout):
+        """Create status message label"""
         self.status_label = QLabel("")
         self.status_label.setObjectName("status_label")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        main_vbox.addWidget(self.status_label)
-        main_vbox.addSpacing(6)
+        main_layout.addWidget(self.status_label)
+        main_layout.addSpacing(6)
 
+    def _create_main_content(self, main_layout):
+        """Create main content area with sidebar and numpad grid"""
         content = QHBoxLayout()
         
-        # Create a container for search and scroll area
+        # Left sidebar with search and stratagem list
+        self._create_sidebar(content)
+        
+        # Right numpad grid
+        self._create_numpad_grid(content)
+        
+        main_layout.addLayout(content)
+
+    def _create_sidebar(self, content_layout):
+        """Create sidebar with search and stratagem icons"""
         side_container = QWidget()
         side_container.setObjectName("search_scroll_container")
         self.side_container = side_container
+        
         side = QVBoxLayout(side_container)
-        side.setSpacing(0)  # Remove gap between search and list
-        side.setContentsMargins(0, 0, 0, 0)  # Remove margins
+        side.setSpacing(0)
+        side.setContentsMargins(0, 0, 0, 0)
         side_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         self.search = QLineEdit()
         self.search.setObjectName("search_input")
         self.search.setPlaceholderText("Search...")
         self.search.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.search.setMinimumHeight(32)
-        self.search.setMaximumHeight(32)
         self.search.setFixedHeight(32)
         self.search.textChanged.connect(self.filter_icons)
         self.search.textChanged.connect(self.update_search_clear_visibility)
+        
         self.search_clear_btn = QToolButton(self.search)
         self.search_clear_btn.setObjectName("search_clear_btn")
         self.search_clear_btn.setText("x")
@@ -1285,10 +206,11 @@ class StratagemApp(QMainWindow):
         self.search_clear_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.search_clear_btn.clicked.connect(self.search.clear)
         self.search_clear_btn.hide()
+        
         self.search.installEventFilter(self)
         self.update_search_clear_visibility(self.search.text())
         side.addWidget(self.search)
-
+        
         self.icon_list = QListWidget()
         self.icon_list.setObjectName("icon_list")
         self.icon_list.setViewMode(QListWidget.ViewMode.IconMode)
@@ -1306,6 +228,15 @@ class StratagemApp(QMainWindow):
         self.icon_items = []
         self.header_items = []
         
+        self._populate_icon_list()
+        
+        side.addWidget(self.icon_list)
+        QTimer.singleShot(100, self.update_header_widths)
+        
+        content_layout.addWidget(side_container)
+
+    def _populate_icon_list(self):
+        """Populate the icon list with stratagems organized by department"""
         for department, stratagems in STRATAGEMS_BY_DEPARTMENT.items():
             header_item = QListWidgetItem()
             header_container = QWidget()
@@ -1314,17 +245,7 @@ class StratagemApp(QMainWindow):
             header_layout.setSpacing(0)
             
             header_label = QLabel(department)
-            header_label.setStyleSheet("""
-                QLabel {
-                    color: #00d4ff;
-                    font-weight: bold;
-                    font-size: 12px;
-                    padding: 10px 8px 8px 8px;
-                    background: rgba(0, 100, 120, 0.2);
-                    border-bottom: 1px solid rgba(0, 212, 255, 0.3);
-                    border-radius: 0px;
-                }
-            """)
+            header_label.setObjectName("department_header")
             header_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             header_layout.addWidget(header_label)
             header_container.setLayout(header_layout)
@@ -1334,120 +255,62 @@ class StratagemApp(QMainWindow):
             self.icon_list.setItemWidget(header_item, header_container)
             self.header_items.append(header_item)
             
-            # Add icons for this department
             for name in sorted(stratagems.keys()):
                 w = DraggableIcon(name)
                 item = QListWidgetItem()
                 item.setSizeHint(QSize(80, 80))
                 self.icon_list.addItem(item)
                 self.icon_list.setItemWidget(item, w)
-
                 self.icon_widgets.append(w)
                 self.icon_items.append((item, w))
-        
-        side.addWidget(self.icon_list)
-        QTimer.singleShot(100, self.update_header_widths)  # Update headers after layout settles
 
+    def _create_numpad_grid(self, content_layout):
+        """Create the numpad grid layout"""
         grid = QGridLayout()
         grid.setSpacing(12)
         
-        slot = NumpadSlot('53', '/', self)
-        grid.addWidget(slot, 0, 1)
-        self.slots['53'] = slot
+        for scan_code, label, row, col, rowspan, colspan in NUMPAD_LAYOUT:
+            slot = NumpadSlot(scan_code, label, self)
+            grid.addWidget(slot, row, col, rowspan, colspan)
+            self.slots[scan_code] = slot
         
-        slot = NumpadSlot('55', '*', self)
-        grid.addWidget(slot, 0, 2)
-        self.slots['55'] = slot
-        
-        slot = NumpadSlot('74', '-', self)
-        grid.addWidget(slot, 0, 3)
-        self.slots['74'] = slot
-        
-        slot = NumpadSlot('71', '7', self)
-        grid.addWidget(slot, 1, 0)
-        self.slots['71'] = slot
-        
-        slot = NumpadSlot('72', '8', self)
-        grid.addWidget(slot, 1, 1)
-        self.slots['72'] = slot
-        
-        slot = NumpadSlot('73', '9', self)
-        grid.addWidget(slot, 1, 2)
-        self.slots['73'] = slot
-        
-        slot = NumpadSlot('78', '+', self)
-        grid.addWidget(slot, 1, 3, 2, 1)
-        self.slots['78'] = slot
-        
-        slot = NumpadSlot('75', '4', self)
-        grid.addWidget(slot, 2, 0)
-        self.slots['75'] = slot
-        
-        slot = NumpadSlot('76', '5', self)
-        grid.addWidget(slot, 2, 1)
-        self.slots['76'] = slot
-        
-        slot = NumpadSlot('77', '6', self)
-        grid.addWidget(slot, 2, 2)
-        self.slots['77'] = slot
-        
-        slot = NumpadSlot('79', '1', self)
-        grid.addWidget(slot, 3, 0)
-        self.slots['79'] = slot
-        
-        slot = NumpadSlot('80', '2', self)
-        grid.addWidget(slot, 3, 1)
-        self.slots['80'] = slot
-        
-        slot = NumpadSlot('81', '3', self)
-        grid.addWidget(slot, 3, 2)
-        self.slots['81'] = slot
-        
-        slot = NumpadSlot('28', 'Enter', self)
-        grid.addWidget(slot, 3, 3, 2, 1)
-        self.slots['28'] = slot
-        
-        slot = NumpadSlot('82', '0', self)
-        grid.addWidget(slot, 4, 0, 1, 2)
-        self.slots['82'] = slot
-        
-        slot = NumpadSlot('83', '.', self)
-        grid.addWidget(slot, 4, 2)
-        self.slots['83'] = slot
-
-        # Create a widget container for the grid with fixed dimensions
         grid_container = QWidget()
         grid_container.setLayout(grid)
-        grid_container.setFixedSize(396, 498)  # 4 cols × 90px + 3 gaps × 12px = 396; 5 rows × 90px + 4 gaps × 12px = 498
+        grid_container.setFixedSize(396, 498)
         grid_container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-
-        content.addWidget(side_container); content.addWidget(grid_container); main_vbox.addLayout(content)
         
-        self.setMinimumWidth(900)
+        content_layout.addWidget(grid_container)
 
-        # Bottom bar with macro toggle
+    def _create_bottom_bar(self, main_layout):
+        """Create bottom bar with macro toggle"""
         bottom_bar = QWidget()
         bottom_bar.setObjectName("bottom_bar")
         bottom_bar_layout = QHBoxLayout(bottom_bar)
         bottom_bar_layout.setContentsMargins(8, 6, 8, 12)
         bottom_bar_layout.setSpacing(8)
+        
         self.status_text_label = QLabel("Status: Disabled")
         self.status_text_label.setObjectName("macros_status_label")
         self.status_text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         bottom_bar_layout.addWidget(self.status_text_label, 1)
+        
         self.macros_toggle = QCheckBox("")
         self.macros_toggle.setObjectName("macros_toggle")
         self.macros_toggle.toggled.connect(lambda checked: self.set_macros_enabled(checked))
         bottom_bar_layout.addWidget(self.macros_toggle)
-        main_vbox.addWidget(bottom_bar)
+        
+        main_layout.addWidget(bottom_bar)
 
+    # Event handlers
     def resizeEvent(self, event):
+        """Handle window resize events"""
         super().resizeEvent(event)
         self.update_search_clear_position()
         self.update_search_width()
         self.update_header_widths()
 
     def eventFilter(self, source, event):
+        """Filter events for search bar and icon list"""
         if hasattr(self, 'search') and source == self.search and event.type() == QEvent.Type.Resize:
             self.update_search_clear_position()
             if self.search.height() != 32:
@@ -1456,26 +319,56 @@ class StratagemApp(QMainWindow):
             self.update_header_widths()
         return super().eventFilter(source, event)
 
+    def closeEvent(self, event):
+        """Handle window close event"""
+        if self.has_unsaved_changes():
+            reply = QMessageBox.question(
+                self, "Unsaved Changes",
+                "You have unsaved changes. Close anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                event.ignore()
+                return
+        
+        if self.global_settings.get("minimize_to_tray", False):
+            self.hide()
+            event.ignore()
+        else:
+            self.macro_engine.disable()
+            event.accept()
+
+    def _autoload_last_profile(self):
+        """Autoload the last used profile if enabled"""
+        if self.global_settings.get("autoload_profile", False):
+            last_profile = self.global_settings.get("last_profile", None)
+            if last_profile and last_profile != "Create new profile":
+                idx = self.profile_box.findText(last_profile)
+                if idx >= 0:
+                    self.profile_box.setCurrentIndex(idx)
+
+    # UI update methods
     def update_header_widths(self):
         """Update header item sizes to match the scroll list width"""
         if not hasattr(self, 'header_items') or not hasattr(self, 'icon_list'):
             return
-        
         viewport_width = self.icon_list.viewport().width()
-        
         for header_item in self.header_items:
             header_item.setSizeHint(QSize(viewport_width - 4, 32))
 
     def update_search_clear_visibility(self, text):
+        """Update search clear button visibility"""
         if not hasattr(self, "search_clear_btn"):
             return
-        has_text = bool(text)
-        self.search_clear_btn.setVisible(has_text)
+        self.search_clear_btn.setVisible(bool(text))
         self.update_search_clear_position()
 
     def update_search_clear_position(self):
+        """Update search clear button position"""
         if not hasattr(self, "search_clear_btn"):
             return
+        from PyQt6.QtWidgets import QStyle
         frame_width = self.search.style().pixelMetric(QStyle.PixelMetric.PM_DefaultFrameWidth)
         btn_size = self.search_clear_btn.sizeHint()
         right_padding = btn_size.width() + 10
@@ -1485,6 +378,7 @@ class StratagemApp(QMainWindow):
         self.search_clear_btn.move(x, y)
 
     def update_search_width(self):
+        """Update search bar width"""
         if not hasattr(self, "icon_list") or not hasattr(self, "search"):
             return
         placeholder_width = self.search.fontMetrics().horizontalAdvance(self.search.placeholderText())
@@ -1495,184 +389,51 @@ class StratagemApp(QMainWindow):
         self.search.setFixedHeight(32)
 
     def show_status(self, text, duration=2500):
+        """Show status message"""
         self.status_label.setText(text.upper())
         self.status_label.show()
         self.status_label.raise_()
         QTimer.singleShot(duration, lambda: self.status_label.setText(""))
 
+    def update_speed_label(self, value):
+        """Update speed/latency label"""
+        self.speed_btn.setText(f"Latency: {value}ms")
+
     def update_macro_toggle_ui(self):
+        """Update macro toggle UI elements"""
         enabled = self.global_settings.get("macros_enabled", False)
+        
         if hasattr(self, "macros_toggle"):
             self.macros_toggle.blockSignals(True)
             self.macros_toggle.setChecked(enabled)
             self.macros_toggle.blockSignals(False)
+        
         if hasattr(self, "status_text_label"):
             self.status_text_label.setText("Status: Enabled" if enabled else "Status: Disabled")
             self.status_text_label.setProperty("state", "enabled" if enabled else "disabled")
             self.status_text_label.style().unpolish(self.status_text_label)
             self.status_text_label.style().polish(self.status_text_label)
-        if hasattr(self, "tray_toggle_action"):
-            self.tray_toggle_action.blockSignals(True)
-            self.tray_toggle_action.setChecked(enabled)
-            self.tray_toggle_action.setText("Disable Macros" if enabled else "Enable Macros")
-            self.tray_toggle_action.blockSignals(False)
-        if hasattr(self, "tray_icon"):
-            state = "ON" if enabled else "OFF"
-            self.tray_icon.setToolTip(f"Helldivers Numpad Macros ({state})")
 
-    def set_macros_enabled(self, enabled, notify=True):
-        self.global_settings["macros_enabled"] = bool(enabled)
-        self.save_global_settings()
-        if enabled:
-            self.inject_all()
-            if notify:
-                self.show_status("Macros enabled")
-        else:
-            try:
-                keyboard.unhook_all()
-            except:
-                pass
-            if notify:
-                self.show_status("Macros disabled")
-        self.update_macro_toggle_ui()
-
-    def sync_macro_hook_state(self, notify=False):
-        self.set_macros_enabled(self.global_settings.get("macros_enabled", False), notify=notify)
-
-    def map_direction_to_key(self, direction):
-        """Map stratagem direction to actual key based on user setting"""
-        keybind_mode = self.global_settings.get("keybind_mode", "arrows")
-        
-        if keybind_mode == "wasd":
-            mapping = {
-                "up": "w",
-                "down": "s",
-                "left": "a",
-                "right": "d"
-            }
-        else:  # arrows (default)
-            mapping = {
-                "up": "up",
-                "down": "down",
-                "left": "left",
-                "right": "right"
-            }
-        
-        return mapping.get(direction, direction)
-    
-    def load_global_settings(self):
-        """Load global settings from SETTINGS_FILE"""
-        default_settings = {
-            "latency": 20,
-            "macros_enabled": False,
-            "keybind_mode": "arrows",
-            "require_admin": False,
-            "sound_enabled": False,
-        }
-        try:
-            if os.path.exists(SETTINGS_FILE):
-                with open(SETTINGS_FILE, "r") as f:
-                    self.global_settings = json.load(f)
-            else:
-                self.global_settings = default_settings.copy()
-                self.save_global_settings()
-        except Exception:
-            self.global_settings = default_settings.copy()
-
-        if "macros_enabled" not in self.global_settings:
-            self.global_settings["macros_enabled"] = False
-            self.save_global_settings()
-        
-        if "keybind_mode" not in self.global_settings:
-            self.global_settings["keybind_mode"] = "arrows"
-            self.save_global_settings()
-
-        if "require_admin" not in self.global_settings:
-            self.global_settings["require_admin"] = False
-            self.save_global_settings()
-
-        if "sound_enabled" not in self.global_settings:
-            self.global_settings["sound_enabled"] = False
-            self.save_global_settings()
+    # Settings and theme methods
+    def apply_theme(self, theme_name="Dark (Default)"):
+        """Apply theme stylesheet"""
+        qss = get_theme_stylesheet(theme_name)
+        if qss:
+            self.setStyleSheet(qss)
 
     def save_global_settings(self):
-        """Save global settings to SETTINGS_FILE"""
-        try:
-            with open(SETTINGS_FILE, "w") as f:
-                json.dump(self.global_settings, f, indent=2)
-        except Exception:
-            pass
-
-    def apply_theme(self, theme_name="Dark (Default)"):
-        try:
-            theme_file = THEME_FILES.get(theme_name, THEME_FILES["Dark (Default)"])
-            # Use the same logic as find_svg_path to locate the theme inside the EXE
-            base_path = getattr(sys, '_MEIPASS', os.path.abspath("."))
-            qss_path = os.path.join(base_path, theme_file)
-            
-            if os.path.exists(qss_path):
-                with open(qss_path, 'r', encoding='utf-8') as f:
-                    qss = f.read()
-                assets_root = os.path.join(base_path, ASSETS_DIR)
-                qss = re.sub(
-                    r"url\((['\"]?)assets/([^'\")]+)\1\)",
-                    lambda m: f"url(\"{os.path.join(assets_root, m.group(2)).replace('\\', '/')}\")",
-                    qss,
-                )
-                self.setStyleSheet(qss)
-        except Exception as e:
-            print(f"Theme Error: {e}")
-
-    def update_speed_label(self, value):
-        self.speed_btn.setText(f"Latency: {value}ms")
+        """Save global settings"""
+        save_settings(self.global_settings)
 
     def open_settings(self):
+        """Open settings dialog"""
         dlg = SettingsWindow(self)
         if dlg.exec():
-            self.show_status(f"Settings applied.")
+            self.show_status("Settings applied.")
 
-    def setup_tray(self):
-        """Setup system tray icon and menu"""
-        self.tray_icon = QSystemTrayIcon(self)
-        # Set the tray icon
-        if hasattr(self, 'app_icon') and self.app_icon:
-            self.tray_icon.setIcon(self.app_icon)
-        tray_menu = QMenu()
-        self.tray_toggle_action = tray_menu.addAction("Enable Macros")
-        self.tray_toggle_action.setCheckable(True)
-        self.tray_toggle_action.toggled.connect(lambda checked: self.set_macros_enabled(checked))
-        show_action = tray_menu.addAction("Show")
-        show_action.triggered.connect(self.showNormal)
-        tray_menu.addSeparator()
-        quit_action = tray_menu.addAction("Quit")
-        quit_action.triggered.connect(self.quit_application)
-        self.tray_icon.setContextMenu(tray_menu)
-        # Click on tray icon to toggle window visibility
-        self.tray_icon.activated.connect(self.toggle_window_visibility)
-        self.tray_icon.show()
-        self.update_macro_toggle_ui()
-
-    def toggle_window_visibility(self, reason):
-        """Toggle window visibility when tray icon is clicked"""
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            if self.isVisible():
-                self.hide()
-            else:
-                self.showNormal()
-
-    def quit_application(self):
-        """Quit the application"""
-        try:
-            keyboard.unhook_all()
-        except:
-            pass
-        QApplication.quit()
-
-    def edit_latency_manually(self):
-        val, ok = QInputDialog.getInt(self, "Manual Latency", "Set delay (ms):", self.speed_slider.value(), 1, 200, 1)
-        if ok: self.speed_slider.setValue(val)
-
+    # Profile management methods
     def refresh_profiles(self):
+        """Refresh the profile list"""
         self.profile_box.blockSignals(True)
         self.profile_box.clear()
         files = [os.path.splitext(f)[0] for f in os.listdir(PROFILES_DIR) if f.endswith(".json")]
@@ -1685,13 +446,15 @@ class StratagemApp(QMainWindow):
         self.profile_changed()
 
     def profile_changed(self):
+        """Handle profile change"""
         current = self.profile_box.currentText()
         if current == "Create new profile":
-            for slot in self.slots.values(): slot.clear_slot()
+            for slot in self.slots.values():
+                slot.clear_slot()
             self.sync_macro_hook_state()
             self.saved_state = None
             self.show_status("FRESH PROFILE READY")
-        else: 
+        else:
             self.load_profile(os.path.join(PROFILES_DIR, f"{current}.json"))
             self.show_status(f"LOADED: {current.upper()}")
             # Track last loaded profile for autoload
@@ -1700,184 +463,49 @@ class StratagemApp(QMainWindow):
         self.update_undo_state()
 
     def manual_save(self):
+        """Manually save current profile"""
         current = self.profile_box.currentText()
         if current == "Create new profile":
             name, ok = QInputDialog.getText(self, "New Profile", "Enter name:")
             if ok and name:
                 clean_name = os.path.splitext(name)[0]
-                self.save_to_file(os.path.join(PROFILES_DIR, f"{clean_name}.json"))
+                state = self.get_current_state()
+                ProfileManager.save_profile(clean_name, state)
                 self.refresh_profiles()
                 self.profile_box.setCurrentText(clean_name)
                 self.show_status("PROFILE SAVED")
-            else: return
-        else: 
-            self.save_to_file(os.path.join(PROFILES_DIR, f"{current}.json"))
+            else:
+                return
+        else:
+            state = self.get_current_state()
+            ProfileManager.save_profile(current, state)
             self.show_status("PROFILE SAVED")
-        self.save_current_state()  # Update saved state after saving
+        self.save_current_state()
         self.update_undo_state()
 
-    def save_to_file(self, path):
-        data = {"speed": self.speed_slider.value(), "mappings": {k: v.assigned_stratagem for k, v in self.slots.items() if v.assigned_stratagem}}
-        with open(path, "w") as f: json.dump(data, f)
-
     def load_profile(self, path):
-        for slot in self.slots.values(): slot.clear_slot()
-        if os.path.exists(path):
-            with open(path, "r") as f:
-                data = json.load(f)
-                self.speed_slider.blockSignals(True)  # Block signals to prevent triggering on_change
-                self.speed_slider.setValue(data.get("speed", 20))
-                self.speed_slider.blockSignals(False)
-                mappings = data.get("mappings", {})
-                
-                # Migrate old stratagem names to new names and track if changes were made
-                migrated = False
-                updated_mappings = {}
-                for code, strat in mappings.items():
-                    if strat in LEGACY_NAME_MAP:
-                        updated_mappings[code] = LEGACY_NAME_MAP[strat]
-                        migrated = True
-                    else:
-                        updated_mappings[code] = strat
-                    
-                    if code in self.slots:
-                        self.slots[code].assign(updated_mappings[code])
-                
-                # If we migrated any names, save the updated profile
-                if migrated:
-                    data["mappings"] = updated_mappings
-                    with open(path, "w") as f:
-                        json.dump(data, f, indent=2)
+        """Load profile from file"""
+        for slot in self.slots.values():
+            slot.clear_slot()
+        
+        # Load profile using ProfileManager
+        profile_name = os.path.splitext(os.path.basename(path))[0]
+        data = ProfileManager.load_profile(profile_name)
+        
+        if data:
+            self.speed_slider.blockSignals(True)
+            self.speed_slider.setValue(data.get("speed", 20))
+            self.speed_slider.blockSignals(False)
             
-            self.sync_macro_hook_state()
-            self.save_current_state()  # Save the loaded state
+            mappings = data.get("mappings", {})
+            for code, strat in mappings.items():
+                if code in self.slots:
+                    self.slots[code].assign(strat)
+        
+        self.sync_macro_hook_state()
+        self.save_current_state()
 
-    def inject_all(self):
-        try: keyboard.unhook_all()
-        except: pass
-        keyboard.hook(self.universal_suppressor)
-
-    def universal_suppressor(self, event):
-        if event.event_type == keyboard.KEY_DOWN:
-            slot = self.slots.get(str(event.scan_code))
-            if slot and slot.assigned_stratagem:
-                if getattr(event, 'is_keypad', True):
-                    stratagem_name = slot.assigned_stratagem
-                    seq = STRATAGEMS.get(stratagem_name)
-                    if seq:
-                        slot.run_macro(stratagem_name, seq, slot.label_text)
-                    return False
-        return True
-
-    def closeEvent(self, event):
-        """Minimize to tray when closed if setting enabled, otherwise quit"""
-        if self.has_unsaved_changes():
-            prompt = "You have unsaved changes. Close anyway?"
-            if QMessageBox.question(
-                self,
-                "Unsaved Changes",
-                prompt,
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            ) != QMessageBox.StandardButton.Yes:
-                event.ignore()
-                return
-        if self.global_settings.get("minimize_to_tray", False):
-            self.hide()
-            event.ignore()
-        else:
-            try:
-                keyboard.unhook_all()
-            except:
-                pass
-            event.accept()
-
-    def confirm_clear(self):
-        if QMessageBox.question(self, 'Reset', 'Clear Slots?', QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
-            for slot in self.slots.values(): slot.clear_slot()
-            self.show_status("GRID CLEARED")
-
-    def filter_icons(self, text):
-        text_lower = text.lower()
-        
-        # Build a set of visible icon item indices
-        visible_icons = {}  # Maps item id to whether it matches the search
-        
-        for item, widget in self.icon_items:
-            matches = text_lower in widget.name.lower() if text_lower else True
-            visible_icons[id(item)] = matches
-        
-        # Show/hide all items in the list, and manage department headers
-        current_department_index = None
-        header_has_visible_items = False
-        
-        for i in range(self.icon_list.count()):
-            item = self.icon_list.item(i)
-            widget = self.icon_list.itemWidget(item)
-            
-            # Check if this is a department header (container with layout containing QLabel)
-            is_header = (isinstance(widget, QWidget) and 
-                        hasattr(widget, 'layout') and 
-                        widget.layout() is not None and
-                        not hasattr(widget, 'stratagem_name'))
-            
-            if is_header:
-                # This is a header - verify it actually has a label inside
-                try:
-                    if widget.layout().count() > 0:
-                        child = widget.layout().itemAt(0).widget()
-                        if isinstance(child, QLabel) and not hasattr(child, 'name'):
-                            # Confirmed this is a header
-                            # If previous header has no visible items, hide it now
-                            if current_department_index is not None and not header_has_visible_items:
-                                self.icon_list.item(current_department_index).setHidden(True)
-                            
-                            current_department_index = i
-                            header_has_visible_items = False
-                            item.setHidden(True)  # Will be unhidden if items match
-                            continue
-                except:
-                    pass
-            
-            # This is an icon (DraggableIcon)
-            if hasattr(widget, 'name'):
-                item_id = id(item)
-                if item_id in visible_icons:
-                    should_show = visible_icons[item_id]
-                    item.setHidden(not should_show)
-                    if should_show and current_department_index is not None:
-                        # Show the department header if an icon in this department matches
-                        self.icon_list.item(current_department_index).setHidden(False)
-                        header_has_visible_items = True
-        
-        # Handle last header
-        if current_department_index is not None and not header_has_visible_items:
-            self.icon_list.item(current_department_index).setHidden(True)
-    
-    
-    
-    
-    
-    def check_for_updates_startup(self):
-        """Check for updates in background on startup"""
-        result = update_checker.check_for_updates(
-            VERSION, GITHUB_REPO_OWNER, GITHUB_REPO_NAME, 
-            install_type=get_install_type(), timeout=10
-        )
-        
-        if not result['success']:
-            # Silently fail on startup check
-            return
-        
-        if result['has_update']:
-            # Check if this version was skipped
-            skipped_version = self.global_settings.get('skipped_version', '')
-            if skipped_version == result.get('tag_name', result['latest_version']):
-                return  # Don't show dialog for skipped version
-            
-            dlg = UpdateDialog(result, self)
-            dlg.exec()
-
+    # State management methods  
     def get_current_state(self):
         """Get the current state of the profile"""
         return {
@@ -1893,10 +521,8 @@ class StratagemApp(QMainWindow):
     def has_unsaved_changes(self):
         """Check if there are unsaved changes"""
         if self.saved_state is None:
-            # Fresh profile has no saved state
             current = self.get_current_state()
             return current["speed"] != 20 or bool(current["mappings"])
-        
         current = self.get_current_state()
         return current != self.saved_state
 
@@ -1905,11 +531,11 @@ class StratagemApp(QMainWindow):
         if self.undo_btn:
             has_changes = self.has_unsaved_changes()
             self.undo_btn.setEnabled(has_changes)
-            # Add visual indication when disabled
             if has_changes:
                 self.undo_btn.setStyleSheet("color: #fff; opacity: 1.0;")
             else:
                 self.undo_btn.setStyleSheet("color: #555; opacity: 0.5; border: 1px solid #333;")
+            
             if hasattr(self, "save_btn") and self.save_btn:
                 border_color = "#ff4444" if has_changes else "#3ddc84"
                 self.save_btn.setStyleSheet(
@@ -1944,39 +570,143 @@ class StratagemApp(QMainWindow):
         self.show_status("Changes undone")
         self.update_undo_state()
 
-if __name__ == '__main__':
-    # Load settings to check admin requirement
-    default_settings = {
-        "latency": 20,
-        "macros_enabled": False,
-        "keybind_mode": "arrows",
-        "require_admin": False,
-        "sound_enabled": False,
-    }
-    if not os.path.exists(SETTINGS_FILE):
-        try:
-            with open(SETTINGS_FILE, "w") as f:
-                json.dump(default_settings, f, indent=2)
-        except Exception:
-            pass
-    require_admin = False
-    try:
-        if os.path.exists(SETTINGS_FILE):
-            with open(SETTINGS_FILE, "r") as f:
-                settings = json.load(f)
-                require_admin = settings.get("require_admin", False)
-    except:
-        pass
+    def filter_icons(self, text):
+        """Filter stratagem icons based on search text"""
+        text_lower = text.lower()
+        visible_icons = {}
+        
+        for item, widget in self.icon_items:
+            matches = text_lower in widget.name.lower() if text_lower else True
+            visible_icons[id(item)] = matches
+        
+        current_department_index = None
+        header_has_visible_items = False
+        
+        for i in range(self.icon_list.count()):
+            item = self.icon_list.item(i)
+            widget = self.icon_list.itemWidget(item)
+            
+            # Check if this is a department header
+            is_header = (isinstance(widget, QWidget) and
+                        hasattr(widget, 'layout') and
+                        widget.layout() is not None and
+                        not hasattr(widget, 'stratagem_name'))
+            
+            if is_header:
+                try:
+                    if widget.layout().count() > 0:
+                        child = widget.layout().itemAt(0).widget()
+                        if isinstance(child, QLabel) and not hasattr(child, 'name'):
+                            if current_department_index is not None and not header_has_visible_items:
+                                self.icon_list.item(current_department_index).setHidden(True)
+                            current_department_index = i
+                            header_has_visible_items = False
+                            item.setHidden(True)
+                            continue
+                except:
+                    pass
+            
+            # This is an icon
+            if hasattr(widget, 'name'):
+                item_id = id(item)
+                if item_id in visible_icons:
+                    should_show = visible_icons[item_id]
+                    item.setHidden(not should_show)
+                    if should_show and current_department_index is not None:
+                        self.icon_list.item(current_department_index).setHidden(False)
+                        header_has_visible_items = True
+        
+        # Handle last header
+        if current_department_index is not None and not header_has_visible_items:
+            self.icon_list.item(current_department_index).setHidden(True)
+
+    def confirm_clear(self):
+        """Confirm and clear all slots"""
+        reply = QMessageBox.question(
+            self, 'Reset', 'Clear Slots?',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            for slot in self.slots.values():
+                slot.clear_slot()
+            self.show_status("GRID CLEARED")
+
+    # Macro functionality
+    def set_macros_enabled(self, enabled, notify=True):
+        """Enable or disable macros"""
+        self.global_settings["macros_enabled"] = bool(enabled)
+        self.save_global_settings()
+        
+        if enabled:
+            self.macro_engine.enable()
+            if notify:
+                self.show_status("Macros enabled")
+        else:
+            self.macro_engine.disable()
+            if notify:
+                self.show_status("Macros disabled")
+        
+        self.update_macro_toggle_ui()
+        
+        # Update tray manager if it exists
+        if hasattr(self, 'tray_manager'):
+            self.tray_manager.update_state(enabled)
+
+    def sync_macro_hook_state(self, notify=False):
+        """Sync macro hook state with settings"""
+        self.set_macros_enabled(self.global_settings.get("macros_enabled", False), notify=notify)
     
-    # If admin is required but not running as admin, request elevation
+    def map_direction_to_key(self, direction):
+        """Map stratagem direction to actual key based on user setting"""
+        keybind_mode = self.global_settings.get("keybind_mode", "arrows")
+        
+        if keybind_mode == "wasd":
+            mapping = {"up": "w", "down": "s", "left": "a", "right": "d"}
+        else:
+            mapping = {"up": "up", "down": "down", "left": "left", "right": "right"}
+        
+        return mapping.get(direction, direction)
+    
+    def on_macro_triggered(self, scan_code):
+        """Callback when a macro is triggered by the macro engine"""
+        slot = self.slots.get(str(scan_code))
+        if slot and slot.assigned_stratagem:
+            stratagem_name = slot.assigned_stratagem
+            seq = STRATAGEMS.get(stratagem_name)
+            if seq:
+                slot.run_macro(stratagem_name, seq, slot.label_text)
+    
+    def _show_window(self):
+        """Show and activate the main window"""
+        self.showNormal()
+        self.activateWindow()
+        self.raise_()
+
+    def quit_application(self):
+        """Quit the application"""
+        self.macro_engine.disable()
+        QApplication.quit()
+    
+    def check_for_updates_startup(self):
+        """Check for updates on startup"""
+        check_for_updates_startup(self, self.global_settings)
+
+
+def main():
+    """Main application entry point"""
+    from src.config.config import is_admin, run_as_admin
+    
+    settings = load_settings()
+    require_admin = settings.get("require_admin", False)
+    
     if require_admin and not is_admin():
         reply = ctypes.windll.user32.MessageBoxW(
             None,
             "This application is configured to require administrator privileges.\nRestart with administrator privileges?",
             "Administrator Privileges Required",
-            0x00000004 | 0x00000020,  # MB_YESNO | MB_ICONQUESTION
+            0x00000004 | 0x00000020,
         )
-        if reply == 6:  # IDYES
+        if reply == 6:
             if run_as_admin():
                 sys.exit(0)
             else:
@@ -1984,11 +714,14 @@ if __name__ == '__main__':
                     None,
                     "Failed to elevate privileges. Continuing without admin rights.",
                     "Error",
-                    0x00000000 | 0x00000010,  # MB_OK | MB_ICONERROR
+                    0x00000000 | 0x00000010,
                 )
     
-    # Continue with normal startup
-    temp_app = QApplication(sys.argv)
+    app = QApplication(sys.argv)
     ex = StratagemApp()
     ex.show()
-    sys.exit(temp_app.exec())
+    sys.exit(app.exec())
+
+
+if __name__ == '__main__':
+    main()

@@ -47,12 +47,12 @@ echo This may take a few minutes...
 pyinstaller --noconfirm --onefile --windowed ^
     --name "HelldiversNumpadMacros" ^
     --add-data "assets;assets" ^
-    --add-data "stratagem_data.py;." ^
-    --add-data "version.py;." ^
-    --add-data "update_checker.py;." ^
-    --add-data "theme_dark_default.qss;." ^
-    --add-data "theme_dark_blue.qss;." ^
-    --add-data "theme_dark_red.qss;." ^
+    --add-data "src/core/stratagem_data.py;." ^
+    --add-data "src/config/version.py;." ^
+    --add-data "src/managers/update_checker.py;." ^
+    --add-data "src/ui/theme_dark_default.qss;." ^
+    --add-data "src/ui/theme_dark_blue.qss;." ^
+    --add-data "src/ui/theme_dark_red.qss;." ^
     --icon "assets/icon.ico" ^
     --manifest "app.manifest" ^
     main.py
@@ -67,12 +67,12 @@ echo.
 echo [Success] EXE created: dist\HelldiversNumpadMacros.exe
 
 REM Read version from version.py as single source of truth
-for /f "tokens=2 delims== " %%A in ('findstr /r /c:"^VERSION[ ]*=" version.py') do set "APP_VERSION=%%~A"
+for /f "tokens=2 delims== " %%A in ('findstr /r /c:"^VERSION[ ]*=" src\config\version.py') do set "APP_VERSION=%%~A"
 if "%APP_VERSION%"=="" set "APP_VERSION=unknown"
 echo Detected app version: %APP_VERSION%
 
 REM Sync installer version to match version.py
-powershell -NoProfile -Command "& { $q = [char]34; $content = Get-Content installer.iss; $content = $content -replace '^#define MyAppVersion .*$', ('#define MyAppVersion ' + $q + $env:APP_VERSION + $q); Set-Content installer.iss $content }"
+powershell -NoProfile -Command "& { $q = [char]34; $content = Get-Content installer\installer.iss; $content = $content -replace '^#define MyAppVersion .*$', ('#define MyAppVersion ' + $q + $env:APP_VERSION + $q); Set-Content installer\installer.iss $content }"
 
 REM Check if Inno Setup is installed
 echo.

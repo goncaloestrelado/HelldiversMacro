@@ -19,7 +19,6 @@ def extract_version(tag_or_version):
         "v0.1.6-beta" -> "0.1.6"
         "release-1.2.3" -> "1.2.3"
     """
-    # Match semantic version pattern (X.Y.Z with optional pre-release info)
     match = re.search(r'(\d+\.\d+\.\d+)', tag_or_version)
     if match:
         return match.group(1)
@@ -41,14 +40,37 @@ def compare_versions(current, latest):
             return 0
         else:
             return -1
-    except:
-        # Fallback to string comparison if parsing fails
+    except Exception:
         if latest > current:
             return 1
         elif latest == current:
             return 0
         else:
             return -1
+
+
+def _find_asset_by_type(assets, install_type):
+    """Find appropriate asset based on installation type"""
+    if install_type == "installed":
+        # Look for setup installer
+        for asset in assets:
+            name = asset.get('name', '').lower()
+            if 'setup' in name and name.endswith('.exe'):
+                return asset.get('browser_download_url')
+    else:
+        # Look for portable version
+        for asset in assets:
+            name = asset.get('name', '').lower()
+            if 'portable' in name and name.endswith('.exe'):
+                return asset.get('browser_download_url')
+    
+    # Fallback: if specific type not found, look for any .exe
+    for asset in assets:
+        name = asset.get('name', '').lower()
+        if name.endswith('.exe'):
+            return asset.get('browser_download_url')
+    
+    return None
 
 
 def check_for_updates(current_version, repo_owner, repo_name, install_type="portable", timeout=5):
@@ -82,46 +104,23 @@ def check_for_updates(current_version, repo_owner, repo_name, install_type="port
         with urlopen(request, timeout=timeout) as response:
             data = json.loads(response.read().decode())
         
-        # Extract version from tag (handle various formats like v0.1.6, beta0.1.6, etc.)
+        # Extract version from tag
         tag_name = data.get('tag_name', '')
         latest_version = extract_version(tag_name)
         
         # Get release info
         release_notes = data.get('body', 'No release notes available.')
         release_url = data.get('html_url', '')
-        
-        # Find installer asset based on install type
-        download_url = None
         assets = data.get('assets', [])
         
-        if install_type == "installed":
-            # Look for setup installer (x64 version)
-            for asset in assets:
-                name = asset.get('name', '').lower()
-                if 'setup' in name and name.endswith('.exe'):
-                    download_url = asset.get('browser_download_url')
-                    break
-        else:
-            # Look for portable version
-            for asset in assets:
-                name = asset.get('name', '').lower()
-                if 'portable' in name and name.endswith('.exe'):
-                    download_url = asset.get('browser_download_url')
-                    break
-        
-        # Fallback: if specific type not found, look for any .exe
-        if not download_url:
-            for asset in assets:
-                name = asset.get('name', '').lower()
-                if name.endswith('.exe'):
-                    download_url = asset.get('browser_download_url')
-                    break
+        # Find installer asset based on install type
+        download_url = _find_asset_by_type(assets, install_type)
         
         # If no assets, use release page
         if not download_url:
             download_url = release_url
         
-        # Compare versions (extract numeric parts from both)
+        # Compare versions
         current_numeric = extract_version(current_version)
         latest_numeric = extract_version(tag_name)
         has_update = compare_versions(current_numeric, latest_numeric) > 0
@@ -135,7 +134,7 @@ def check_for_updates(current_version, repo_owner, repo_name, install_type="port
             'download_url': download_url,
             'release_url': release_url,
             'release_notes': release_notes,
-            'assets': assets  # Include assets for installer download
+            'assets': assets
         }
         
     except HTTPError as e:
@@ -144,11 +143,10 @@ def check_for_updates(current_version, repo_owner, repo_name, install_type="port
                 'success': False,
                 'error': 'Repository or release not found. Check repository settings.'
             }
-        else:
-            return {
-                'success': False,
-                'error': f'HTTP error {e.code}: {e.reason}'
-            }
+        return {
+            'success': False,
+            'error': f'HTTP error {e.code}: {e.reason}'
+        }
     
     except URLError as e:
         return {
@@ -170,10 +168,7 @@ def check_for_updates(current_version, repo_owner, repo_name, install_type="port
 
 
 def format_release_notes(notes, max_length=500):
-    """
-    Format release notes for display (truncate if too long)
-    """
+    """Format release notes for display (truncate if too long)"""
     if len(notes) <= max_length:
         return notes
-    
     return notes[:max_length] + "..."
