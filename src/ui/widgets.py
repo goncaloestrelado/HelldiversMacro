@@ -176,3 +176,46 @@ class NumpadSlot(QWidget):
         
         if self.parent_app.global_settings.get("visual_enabled", True):
             self.parent_app.show_status(f"✓ {name} executed", 1500)
+
+
+class CollapsibleDepartmentHeader(QWidget):
+    """Clickable department header that can be collapsed/expanded"""
+    
+    def __init__(self, department_name, parent_app=None):
+        super().__init__()
+        self.department_name = department_name
+        self.parent_app = parent_app
+        self.is_expanded = True
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        self.header_label = QLabel()
+        self.header_label.setObjectName("department_header")
+        self.header_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.update_header_display()
+        
+        layout.addWidget(self.header_label)
+        self.setLayout(layout)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+    
+    def update_header_display(self):
+        """Update the header display with expand/collapse arrow"""
+        arrow = "▼" if self.is_expanded else "▶"
+        self.header_label.setText(f"{arrow} {self.department_name}")
+    
+    def mousePressEvent(self, event):
+        """Handle click to toggle collapse/expand"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.toggle_collapse()
+            event.accept()
+    
+    def toggle_collapse(self):
+        """Toggle the collapse/expand state"""
+        self.is_expanded = not self.is_expanded
+        self.update_header_display()
+        
+        # Notify parent app to update visibility
+        if self.parent_app and hasattr(self.parent_app, 'update_department_visibility'):
+            self.parent_app.update_department_visibility(self.department_name, self.is_expanded)

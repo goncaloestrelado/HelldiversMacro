@@ -15,7 +15,7 @@ from src.config.constants import NUMPAD_LAYOUT
 from src.core.stratagem_data import STRATAGEMS, STRATAGEMS_BY_DEPARTMENT
 from src.config.version import VERSION, APP_NAME
 from src.ui.dialogs import TestEnvironment, SettingsWindow
-from src.ui.widgets import DraggableIcon, NumpadSlot, comm
+from src.ui.widgets import DraggableIcon, NumpadSlot, comm, CollapsibleDepartmentHeader
 from src.managers.profile_manager import ProfileManager
 from src.core.macro_engine import MacroEngine
 from src.ui.tray_manager import TrayManager
@@ -33,6 +33,7 @@ class StratagemApp(QMainWindow):
         self.saved_state = None
         self.undo_btn = None
         self.save_btn = None
+        self.department_expanded_state = {}  # Track which departments are expanded/collapsed
         
         self.macro_engine = MacroEngine(
             lambda: self.slots,
@@ -211,6 +212,14 @@ class StratagemApp(QMainWindow):
         self.update_search_clear_visibility(self.search.text())
         side.addWidget(self.search)
         
+        # Add collapse/expand all button
+        self.toggle_all_btn = QPushButton("▼ Collapse All")
+        self.toggle_all_btn.setObjectName("toggle_all_btn")
+        self.toggle_all_btn.setFixedHeight(28)
+        self.toggle_all_btn.clicked.connect(self.toggle_all_departments)
+        self.toggle_all_collapsed = False  # Track if all are currently collapsed
+        side.addWidget(self.toggle_all_btn)
+        
         self.icon_list = QListWidget()
         self.icon_list.setObjectName("icon_list")
         self.icon_list.setViewMode(QListWidget.ViewMode.IconMode)
@@ -238,27 +247,23 @@ class StratagemApp(QMainWindow):
     def _populate_icon_list(self):
         """Populate the icon list with stratagems organized by department"""
         for department, stratagems in STRATAGEMS_BY_DEPARTMENT.items():
-            header_item = QListWidgetItem()
-            header_container = QWidget()
-            header_layout = QVBoxLayout(header_container)
-            header_layout.setContentsMargins(0, 0, 0, 0)
-            header_layout.setSpacing(0)
+            # Initialize expanded state for this department
+            self.department_expanded_state[department] = True
             
-            header_label = QLabel(department)
-            header_label.setObjectName("department_header")
-            header_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-            header_layout.addWidget(header_label)
-            header_container.setLayout(header_layout)
+            header_item = QListWidgetItem()
+            header_container = CollapsibleDepartmentHeader(department, parent_app=self)
             
             header_item.setSizeHint(QSize(800, 32))
             self.icon_list.addItem(header_item)
             self.icon_list.setItemWidget(header_item, header_container)
-            self.header_items.append(header_item)
+            self.header_items.append((header_item, header_container, department))
             
             for name in sorted(stratagems.keys()):
                 w = DraggableIcon(name)
                 item = QListWidgetItem()
                 item.setSizeHint(QSize(80, 80))
+                # Store department info with the item
+                item.stratagem_department = department
                 self.icon_list.addItem(item)
                 self.icon_list.setItemWidget(item, w)
                 self.icon_widgets.append(w)
@@ -354,7 +359,7 @@ class StratagemApp(QMainWindow):
         if not hasattr(self, 'header_items') or not hasattr(self, 'icon_list'):
             return
         viewport_width = self.icon_list.viewport().width()
-        for header_item in self.header_items:
+        for header_item, header_container, department in self.header_items:
             header_item.setSizeHint(QSize(viewport_width - 4, 32))
 
     def update_search_clear_visibility(self, text):
@@ -579,46 +584,102 @@ class StratagemApp(QMainWindow):
             matches = text_lower in widget.name.lower() if text_lower else True
             visible_icons[id(item)] = matches
         
-        current_department_index = None
-        header_has_visible_items = False
+        # If searching, expand all departments automatically
+        if text_lower:
+            for department in self.department_expanded_state:
+                self.department_expanded_state[department] = True
+            
+            # Update all headers to show expanded state
+            for header_item, header_container, department in self.header_items:
+                header_container.is_expanded = True
+                header_container.update_header_display()
+            
+            self.toggle_all_collapsed = False
+            self.update_toggle_all_button_state()
         
+        # First pass: determine which headers have items matching the search
+        headers_with_matches = {}
+        for item, widget in self.icon_items:
+            if hasattr(item, 'stratagem_department'):
+                department = item.stratagem_department
+                item_id = id(item)
+                if item_id in visible_icons and visible_icons[item_id]:
+                    if department not in headers_with_matches:
+                        headers_with_matches[department] = False
+                    headers_with_matches[department] = True
+        
+        # Second pass: show/hide items and headers
         for i in range(self.icon_list.count()):
             item = self.icon_list.item(i)
             widget = self.icon_list.itemWidget(item)
             
             # Check if this is a department header
-            is_header = (isinstance(widget, QWidget) and
-                        hasattr(widget, 'layout') and
-                        widget.layout() is not None and
-                        not hasattr(widget, 'stratagem_name'))
+            is_header = isinstance(widget, CollapsibleDepartmentHeader)
             
             if is_header:
-                try:
-                    if widget.layout().count() > 0:
-                        child = widget.layout().itemAt(0).widget()
-                        if isinstance(child, QLabel) and not hasattr(child, 'name'):
-                            if current_department_index is not None and not header_has_visible_items:
-                                self.icon_list.item(current_department_index).setHidden(True)
-                            current_department_index = i
-                            header_has_visible_items = False
-                            item.setHidden(True)
-                            continue
-                except:
-                    pass
+                # Hide headers when searching, show them when search is empty
+                item.setHidden(bool(text_lower))
+                continue
             
             # This is an icon
             if hasattr(widget, 'name'):
                 item_id = id(item)
-                if item_id in visible_icons:
-                    should_show = visible_icons[item_id]
-                    item.setHidden(not should_show)
-                    if should_show and current_department_index is not None:
-                        self.icon_list.item(current_department_index).setHidden(False)
-                        header_has_visible_items = True
+                department = item.stratagem_department if hasattr(item, 'stratagem_department') else None
+                
+                # Check if should be visible based on search filter AND department collapse state
+                should_show_by_search = item_id in visible_icons and visible_icons[item_id]
+                is_department_expanded = self.department_expanded_state.get(department, True)
+                should_show = should_show_by_search and is_department_expanded
+                
+                item.setHidden(not should_show)
+
+    def update_department_visibility(self, department_name, is_expanded):
+        """Update visibility of items in a department based on expanded state"""
+        self.department_expanded_state[department_name] = is_expanded
         
-        # Handle last header
-        if current_department_index is not None and not header_has_visible_items:
-            self.icon_list.item(current_department_index).setHidden(True)
+        # Re-run filter to update visibility with new collapse state
+        self.filter_icons(self.search.text())
+        
+        # Update button state based on whether all departments are now collapsed or expanded
+        all_collapsed = all(not expanded for expanded in self.department_expanded_state.values())
+        all_expanded = all(expanded for expanded in self.department_expanded_state.values())
+        
+        if all_collapsed:
+            self.toggle_all_collapsed = True
+        elif all_expanded:
+            self.toggle_all_collapsed = False
+        
+        self.update_toggle_all_button_state()
+
+    def toggle_all_departments(self):
+        """Toggle all departments between collapsed and expanded"""
+        # If all are collapsed, expand them. Otherwise, collapse them.
+        new_state = self.toggle_all_collapsed  # If True, we're expanding. If False, we're collapsing.
+        
+        for department in self.department_expanded_state:
+            self.department_expanded_state[department] = new_state
+        
+        # Update all headers to show the new state
+        for header_item, header_container, department in self.header_items:
+            header_container.is_expanded = new_state
+            header_container.update_header_display()
+        
+        # Toggle the state tracker
+        self.toggle_all_collapsed = not self.toggle_all_collapsed
+        
+        # Update button text
+        self.update_toggle_all_button_state()
+        
+        # Re-filter to update visibility
+        self.filter_icons(self.search.text())
+
+    def update_toggle_all_button_state(self):
+        """Update the toggle button text based on current state"""
+        if hasattr(self, 'toggle_all_btn'):
+            if self.toggle_all_collapsed:
+                self.toggle_all_btn.setText("▼ Expand All")
+            else:
+                self.toggle_all_btn.setText("▶ Collapse All")
 
     def confirm_clear(self):
         """Confirm and clear all slots"""
