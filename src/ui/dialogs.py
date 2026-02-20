@@ -313,7 +313,10 @@ class SettingsWindow(QDialog):
         self.theme_combo.setStyleSheet(
             "background: #1a1a1a; color: #ddd; border: 1px solid #333; padding: 4px;"
         )
-        self.theme_combo.addItems(["Dark (Default)", "Dark with Blue Accent", "Dark with Red Accent"])
+        if self.parent_app and hasattr(self.parent_app, "get_available_themes"):
+            self.theme_combo.addItems(self.parent_app.get_available_themes())
+        else:
+            self.theme_combo.addItems(["Dark (Default)", "Dark with Blue Accent", "Dark with Red Accent"])
         
         if self.parent_app:
             theme = self.parent_app.global_settings.get("theme", "Dark (Default)")

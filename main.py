@@ -11,13 +11,14 @@ from PyQt6.QtCore import Qt, QTimer, QEvent, QSize
 from PyQt6.QtGui import QIcon
 
 from src.config import (PROFILES_DIR, ASSETS_DIR, get_theme_stylesheet, load_settings, 
-                       save_settings, get_asset_path)
-from src.config.constants import NUMPAD_LAYOUT
-from src.core.stratagem_data import STRATAGEMS, STRATAGEMS_BY_DEPARTMENT
+                       save_settings, get_asset_path, set_icon_overrides)
+from src.config.constants import NUMPAD_LAYOUT, THEME_FILES
+from src.core.stratagem_data import STRATAGEMS_BY_DEPARTMENT as BASE_STRATAGEMS_BY_DEPARTMENT
 from src.config.version import VERSION, APP_NAME
 from src.ui.dialogs import TestEnvironment, SettingsWindow
 from src.ui.widgets import DraggableIcon, NumpadSlot, comm, CollapsibleDepartmentHeader
 from src.managers.profile_manager import ProfileManager
+from src.managers.plugin_manager import PluginManager
 from src.core.macro_engine import MacroEngine
 from src.ui.tray_manager import TrayManager
 from src.managers.update_manager import check_for_updates_startup
@@ -31,6 +32,12 @@ class StratagemApp(QMainWindow):
         self.slots = {}
         self.setWindowTitle(f"{APP_NAME} - Numpad Commander")
         self.global_settings = load_settings()
+        runtime_data = PluginManager.build_runtime_data(BASE_STRATAGEMS_BY_DEPARTMENT, THEME_FILES)
+        self.stratagems_by_department = runtime_data["stratagems_by_department"]
+        self.stratagems = runtime_data["stratagems"]
+        self.theme_files = runtime_data["theme_files"]
+        self.loaded_plugins = runtime_data["loaded_plugins"]
+        set_icon_overrides(runtime_data["icon_overrides"])
         self.saved_state = None
         self.undo_btn = None
         self.save_btn = None
@@ -65,6 +72,10 @@ class StratagemApp(QMainWindow):
         
         # Apply theme
         theme_name = self.global_settings.get("theme", "Dark (Default)")
+        if theme_name not in self.theme_files:
+            theme_name = "Dark (Default)"
+            self.global_settings["theme"] = theme_name
+            self.save_global_settings()
         self.apply_theme(theme_name)
         
         self._load_app_icon()
@@ -277,7 +288,7 @@ class StratagemApp(QMainWindow):
 
     def _populate_icon_list(self):
         """Populate the icon list with stratagems organized by department"""
-        for department, stratagems in STRATAGEMS_BY_DEPARTMENT.items():
+        for department, stratagems in self.stratagems_by_department.items():
             # Initialize expanded state for this department
             self.department_expanded_state[department] = True
             
@@ -453,9 +464,13 @@ class StratagemApp(QMainWindow):
     # Settings and theme methods
     def apply_theme(self, theme_name="Dark (Default)"):
         """Apply theme stylesheet"""
-        qss = get_theme_stylesheet(theme_name)
+        qss = get_theme_stylesheet(theme_name, self.theme_files)
         if qss:
             self.setStyleSheet(qss)
+
+    def get_available_themes(self):
+        """Get all available theme names including plugin themes."""
+        return list(self.theme_files.keys())
 
     def save_global_settings(self):
         """Save global settings"""
@@ -837,7 +852,7 @@ class StratagemApp(QMainWindow):
         slot = self.slots.get(str(scan_code))
         if slot and slot.assigned_stratagem:
             stratagem_name = slot.assigned_stratagem
-            seq = STRATAGEMS.get(stratagem_name)
+            seq = self.stratagems.get(stratagem_name)
             if seq:
                 slot.run_macro(stratagem_name, seq, slot.label_text)
     
