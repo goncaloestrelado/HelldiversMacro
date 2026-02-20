@@ -239,6 +239,87 @@ QPushButton, QToolButton, QComboBox::drop-down, QSlider::groove:horizontal, QSli
 QListWidget::item:selected, QComboBox QAbstractItemView::item:selected, QLineEdit:focus {{
     border-color: {accent};
 }}
+
+QLabel#status_label {{
+    color: {accent};
+    border: 1px solid {accent};
+}}
+
+QWidget[role="icon"]:hover {{
+    border: 1px solid {accent};
+}}
+
+QPushButton[role="action"]:hover {{
+    border: 1px solid {accent};
+}}
+
+QPushButton#menu_button {{
+    color: {accent};
+}}
+
+QPushButton#menu_button:hover {{
+    border: 1px solid {accent};
+}}
+
+QPushButton#nav_toggle_btn, QPushButton#nav_icon_btn, QPushButton#nav_settings_btn {{
+    color: {accent};
+}}
+
+QPushButton#nav_toggle_btn:hover, QPushButton#nav_icon_btn:hover, QPushButton#nav_settings_btn:hover {{
+    border: 1px solid {accent};
+}}
+
+QPushButton#speed_btn:hover {{
+    color: {accent};
+}}
+
+QCheckBox#macros_toggle {{
+    color: {accent};
+}}
+
+QLineEdit#search_input {{
+    color: {accent};
+}}
+
+QToolButton#search_clear_btn {{
+    color: {accent};
+    border: 1px solid {accent};
+}}
+
+QToolButton#search_clear_btn:hover {{
+    border: 1px solid {accent};
+}}
+
+QListWidget#settings_tab_list {{
+    color: {accent};
+}}
+
+QListWidget#settings_tab_list::item:selected {{
+    border-left: 3px solid {accent};
+}}
+
+QWidget[role="numpad-slot"][assigned="false"]:hover {{
+    border: 2px solid {accent};
+}}
+
+QWidget[role="numpad-slot"][assigned="true"] {{
+    border: 2px solid {accent};
+}}
+
+QComboBox#profile_box_styled {{
+    color: {accent};
+    border: 1px solid {accent};
+}}
+
+QComboBox#profile_box_styled:hover {{
+    border: 1px solid {accent};
+}}
+
+QLabel#department_header {{
+    color: {accent};
+    border-bottom: 1px solid {accent};
+    background: rgba(0, 0, 0, 0.2);
+}}
 """
 
 

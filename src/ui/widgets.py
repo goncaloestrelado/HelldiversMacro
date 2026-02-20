@@ -4,7 +4,7 @@ Reusable widgets for Helldivers Numpad Macros
 
 import time
 import winsound
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy
 from PyQt6.QtCore import Qt, QObject, pyqtSignal
 from PyQt6.QtSvgWidgets import QSvgWidget
 from PyQt6.QtGui import QDrag
@@ -186,6 +186,7 @@ class CollapsibleDepartmentHeader(QWidget):
         self.department_name = department_name
         self.parent_app = parent_app
         self.is_expanded = True
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -194,6 +195,7 @@ class CollapsibleDepartmentHeader(QWidget):
         self.header_label = QLabel()
         self.header_label.setObjectName("department_header")
         self.header_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.header_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.update_header_display()
         
         layout.addWidget(self.header_label)
