@@ -153,10 +153,11 @@ class NumpadSlot(QWidget):
     
     def __init__(self, scan_code, label_text, parent_app):
         super().__init__()
-        self.scan_code = int(scan_code)
+        self.scan_code = str(scan_code)
         self.label_text = label_text
         self.parent_app = parent_app
         self.assigned_stratagem = None
+        self.is_hidden = False
         
         self.setProperty("role", "numpad-slot")
         self.setAcceptDrops(True)
@@ -172,19 +173,47 @@ class NumpadSlot(QWidget):
         
         self.update_style(False)
 
+    def set_hidden(self, hidden):
+        """Hide/show slot contents while preserving its grid space."""
+        self.is_hidden = bool(hidden)
+        if self.is_hidden:
+            self.assigned_stratagem = None
+            self.svg_display.hide()
+            self.label.setText("")
+            self.label.hide()
+            self.setAcceptDrops(False)
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            self.setStyleSheet(self.build_slot_stylesheet(False))
+            return
+
+        self.setAcceptDrops(True)
+        self.label.setText(self.label_text)
+        self.label.show()
+        self.update_style(bool(self.assigned_stratagem))
+
     def update_style(self, assigned):
         """Update visual style based on whether slot is assigned"""
+        if self.is_hidden:
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            self.setStyleSheet(self.build_slot_stylesheet(False))
+            return
+
+        self.setCursor(
+            Qt.CursorShape.PointingHandCursor if assigned else Qt.CursorShape.ArrowCursor
+        )
+        self.setStyleSheet(self.build_slot_stylesheet(assigned))
+
+    @staticmethod
+    def build_slot_stylesheet(assigned):
+        """Return the exact stylesheet used by numpad slots."""
         if assigned:
             border_style, color, bg = "solid", "#ffcc00", "#151515"
-            cursor = Qt.CursorShape.PointingHandCursor
             hover_border, hover_bg = "#ff4444", "#201010"
         else:
             border_style, color, bg = "dashed", "#444", "#0a0a0a"
-            cursor = Qt.CursorShape.ArrowCursor
             hover_border, hover_bg = "#ffcc00", "#151515"
-        
-        self.setCursor(cursor)
-        self.setStyleSheet(
+
+        return (
             f"QWidget {{ border: 2px {border_style} {color}; background: {bg}; "
             f"color: #888; border-radius: 8px; font-weight: bold; }} "
             f"QWidget:hover {{ border: 2px solid {hover_border}; background: {hover_bg}; }}"
@@ -192,6 +221,9 @@ class NumpadSlot(QWidget):
 
     def mousePressEvent(self, event):
         """Handle mouse press for clearing or dragging"""
+        if self.is_hidden:
+            return
+
         if event.button() == Qt.MouseButton.RightButton:
             if self.assigned_stratagem:
                 self.clear_slot()
@@ -212,10 +244,17 @@ class NumpadSlot(QWidget):
 
     def dragEnterEvent(self, event):
         """Accept drag enter events"""
+        if self.is_hidden:
+            event.ignore()
+            return
         event.accept()
 
     def dropEvent(self, event):
         """Handle drop events for swapping or assigning stratagems"""
+        if self.is_hidden:
+            event.ignore()
+            return
+
         incoming_strat = event.mimeData().text()
         source_slot_code = event.mimeData().data("source_slot").data().decode()
 
@@ -235,6 +274,8 @@ class NumpadSlot(QWidget):
 
     def clear_slot(self):
         """Clear the slot assignment"""
+        if self.is_hidden:
+            return
         self.assigned_stratagem = None
         self.svg_display.hide()
         self.label.show()
@@ -243,6 +284,8 @@ class NumpadSlot(QWidget):
 
     def assign(self, strat_name):
         """Assign a stratagem to this slot"""
+        if self.is_hidden:
+            return
         self.assigned_stratagem = strat_name
         path = find_svg_path(strat_name)
         if path:
@@ -254,6 +297,8 @@ class NumpadSlot(QWidget):
 
     def run_macro(self, name, sequence, key_label):
         """Execute the macro for this slot"""
+        if self.is_hidden:
+            return
         comm.update_test_display.emit(name, sequence, key_label)
         delay = self.parent_app.speed_slider.value() / 1000.0
         

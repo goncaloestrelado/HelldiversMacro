@@ -7,15 +7,15 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QGridLayout, QL
                              QHBoxLayout, QVBoxLayout, QLineEdit, QPushButton, QComboBox,
                              QMessageBox, QListWidget, QToolButton, QCheckBox,
                              QSizePolicy, QListWidgetItem, QSlider, QInputDialog,
-                             QFileDialog, QStackedWidget, QFormLayout, QDialog,
+                             QFileDialog, QStackedWidget, QFormLayout, QDialog, QBoxLayout,
                              QPlainTextEdit, QStyle, QColorDialog)
-from PyQt6.QtCore import Qt, QTimer, QEvent, QSize, pyqtSignal, QByteArray
-from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor
+from PyQt6.QtCore import Qt, QTimer, QEvent, QSize, pyqtSignal, QByteArray, QPoint
+from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QCursor, QKeySequence
 from PyQt6.QtSvg import QSvgRenderer
 
 from src.config import (PROFILES_DIR, ASSETS_DIR, get_theme_stylesheet, load_settings, 
                        save_settings, get_asset_path, set_icon_overrides)
-from src.config.constants import NUMPAD_LAYOUT, THEME_FILES, KEYBIND_MAPPINGS
+from src.config.constants import NUMPAD_LAYOUT, THEME_FILES, KEYBIND_MAPPINGS, NUMPAD_GRID_WIDTH, NUMPAD_GRID_HEIGHT
 from src.core.stratagem_data import STRATAGEMS_BY_DEPARTMENT as BASE_STRATAGEMS_BY_DEPARTMENT
 from src.config.version import VERSION, APP_NAME
 from src.ui.dialogs import TestEnvironment, SettingsWindow
@@ -25,6 +25,21 @@ from src.managers.plugin_manager import PluginManager
 from src.core.macro_engine import MacroEngine
 from src.ui.tray_manager import TrayManager
 from src.managers.update_manager import check_for_updates_startup
+
+
+DEFAULT_SLOT_LAYOUT_NAME = "Default Numpad"
+NEW_LAYOUT_OPTION_LABEL = "New Layout..."
+MAX_CUSTOM_LAYOUT_KEYS = 20
+GRID_PICKER_MAX_ROWS = 5
+GRID_PICKER_MAX_COLS = 10
+CUSTOM_SLOT_SCAN_CODES = [
+    "53", "55", "74",
+    "71", "72", "73", "78",
+    "75", "76", "77",
+    "79", "80", "81", "28",
+    "82", "83", "69",
+    "custom_18", "custom_19", "custom_20", "custom_21",
+]
 
 
 class SequenceRecorderDialog(QDialog):
@@ -234,6 +249,53 @@ class SvgPathDialog(QDialog):
         return self.path_input.text().strip(), self.svg_code_input.toPlainText().strip()
 
 
+class KeyCaptureDialog(QDialog):
+    """Dialog that captures next pressed key for slot assignment."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Assign Key")
+        self.setModal(True)
+        self.setMinimumWidth(360)
+        self.captured_scan_code = None
+        self.captured_label = None
+
+        layout = QVBoxLayout(self)
+        info = QLabel("Press the key to assign to this slot.\nPress Esc to cancel.")
+        info.setStyleSheet("color: #aaa;")
+        layout.addWidget(info)
+
+        self.capture_label = QLabel("Waiting for key input...")
+        self.capture_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.capture_label.setStyleSheet("font-size: 14px; font-weight: bold;")
+        layout.addWidget(self.capture_label)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.activateWindow()
+        self.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape:
+            self.reject()
+            return
+
+        scan_code = int(event.nativeScanCode()) if hasattr(event, "nativeScanCode") else 0
+        if scan_code <= 0:
+            return
+
+        key_label = QKeySequence(event.key()).toString()
+        if not key_label:
+            key_label = event.text().strip().upper() if event.text() else "Unknown"
+        if not key_label:
+            key_label = f"SC {scan_code}"
+
+        self.captured_scan_code = str(scan_code)
+        self.captured_label = key_label
+        self.capture_label.setText(f"Assigned: {key_label}")
+        self.accept()
+
+
 class StratagemEntryWidget(QWidget):
     """Single stratagem entry row with name + sequence record/save."""
 
@@ -391,6 +453,36 @@ class StratagemApp(QMainWindow):
         self.slots = {}
         self.setWindowTitle(f"{APP_NAME} - Numpad Commander")
         self.global_settings = load_settings()
+        self.slot_layouts = self._load_slot_layouts_from_settings()
+        self.active_slot_layout_name = self._sanitize_layout_name(
+            self.global_settings.get("active_slot_layout", DEFAULT_SLOT_LAYOUT_NAME)
+        )
+        if self.active_slot_layout_name not in self.slot_layouts:
+            self.active_slot_layout_name = DEFAULT_SLOT_LAYOUT_NAME
+
+        self.grid_picker_selected_rows = 4
+        self.grid_picker_selected_cols = 4
+        self.grid_picker_selected_rows, self.grid_picker_selected_cols = self._clamp_picker_size(
+            self.grid_picker_selected_rows,
+            self.grid_picker_selected_cols,
+        )
+        self.grid_picker_preview_size = None
+        self.grid_picker_cells = []
+        self.pending_layout_key_bindings = {}
+        self.pending_cleared_slot_indexes = set()
+        self.grid_picker_close_timer = QTimer(self)
+        self.grid_picker_close_timer.setSingleShot(True)
+        self.grid_picker_close_timer.setInterval(240)
+        self.grid_picker_close_timer.timeout.connect(self._hide_grid_picker_popup_if_outside)
+        self.slots_resize_timer = QTimer(self)
+        self.slots_resize_timer.setSingleShot(True)
+        self.slots_resize_timer.setInterval(5)
+        self.slots_resize_timer.timeout.connect(self._auto_adjust_window_for_slots_preview)
+        self.main_resize_timer = QTimer(self)
+        self.main_resize_timer.setSingleShot(True)
+        self.main_resize_timer.setInterval(20)
+        self.main_resize_timer.timeout.connect(self._auto_adjust_window_for_main_slots)
+
         self.plugin_creator_dirty = False
         self._macro_state_before_plugins = None
         self._macro_forced_by_plugins = False
@@ -421,6 +513,212 @@ class StratagemApp(QMainWindow):
         
         if self.global_settings.get("auto_check_updates", True):
             QTimer.singleShot(1000, self.check_for_updates_startup)
+
+    def _sanitize_layout_name(self, name):
+        """Return a cleaned layout name, or empty string when invalid."""
+        if not isinstance(name, str):
+            return ""
+        return name.strip()
+
+    def _clamp_picker_size(self, rows, cols):
+        """Clamp picker dimensions to picker bounds and max allowed key count."""
+        try:
+            rows = int(rows)
+        except (TypeError, ValueError):
+            rows = 1
+        try:
+            cols = int(cols)
+        except (TypeError, ValueError):
+            cols = 1
+
+        rows = max(1, min(rows, GRID_PICKER_MAX_ROWS))
+        cols = max(1, min(cols, GRID_PICKER_MAX_COLS))
+
+        while rows * cols > MAX_CUSTOM_LAYOUT_KEYS:
+            if cols >= rows and cols > 1:
+                cols -= 1
+            elif rows > 1:
+                rows -= 1
+            else:
+                break
+
+        return rows, cols
+
+    def _default_slot_layout_definition(self):
+        """Return default fixed numpad layout definition."""
+        return {
+            "type": "default_numpad",
+        }
+
+    def _default_numpad_preview_template(self):
+        """Return preview data that visually matches the classic default numpad layout."""
+        return {
+            "rows": 5,
+            "cols": 4,
+            "key_bindings": {
+                "1": {"scan_code": "53", "label": "/"},
+                "2": {"scan_code": "55", "label": "*"},
+                "3": {"scan_code": "74", "label": "-"},
+                "4": {"scan_code": "71", "label": "7"},
+                "5": {"scan_code": "72", "label": "8"},
+                "6": {"scan_code": "73", "label": "9"},
+                "7": {"scan_code": "78", "label": "+"},
+                "8": {"scan_code": "75", "label": "4"},
+                "9": {"scan_code": "76", "label": "5"},
+                "10": {"scan_code": "77", "label": "6"},
+                "12": {"scan_code": "79", "label": "1"},
+                "13": {"scan_code": "80", "label": "2"},
+                "14": {"scan_code": "81", "label": "3"},
+                "15": {"scan_code": "28", "label": "Enter"},
+                "16": {"scan_code": "82", "label": "0"},
+                "18": {"scan_code": "83", "label": "."},
+            },
+            "cleared_slots": [0, 11, 17, 19],
+        }
+
+    def _normalize_custom_layout_definition(self, layout_definition):
+        """Normalize a custom grid layout definition."""
+        if not isinstance(layout_definition, dict):
+            return None
+
+        layout_type = layout_definition.get("type", "")
+        if layout_type != "grid":
+            return None
+
+        try:
+            rows = int(layout_definition.get("rows", 0))
+            cols = int(layout_definition.get("cols", 0))
+        except (TypeError, ValueError):
+            return None
+
+        if rows < 1 or cols < 1:
+            return None
+        if rows > GRID_PICKER_MAX_ROWS or cols > GRID_PICKER_MAX_COLS:
+            return None
+        if rows * cols > MAX_CUSTOM_LAYOUT_KEYS:
+            return None
+
+        key_bindings = {}
+        raw_bindings = layout_definition.get("key_bindings", {})
+        if isinstance(raw_bindings, dict):
+            slot_count = min(rows * cols, MAX_CUSTOM_LAYOUT_KEYS, len(CUSTOM_SLOT_SCAN_CODES))
+            for key, binding in raw_bindings.items():
+                try:
+                    index = int(key)
+                except (TypeError, ValueError):
+                    continue
+                if index < 0 or index >= slot_count:
+                    continue
+                if not isinstance(binding, dict):
+                    continue
+
+                scan_code = str(binding.get("scan_code", "")).strip()
+                if not scan_code:
+                    continue
+
+                label = str(binding.get("label", "")).strip()
+                if not label:
+                    label = f"Key {index + 1}"
+
+                key_bindings[str(index)] = {
+                    "scan_code": scan_code,
+                    "label": label,
+                }
+
+        cleared_slots = set()
+        raw_cleared = layout_definition.get("cleared_slots", [])
+        if not isinstance(raw_cleared, list):
+            raw_cleared = layout_definition.get("hidden_slots", [])  # backward compatibility
+        if isinstance(raw_cleared, list):
+            slot_count = min(rows * cols, MAX_CUSTOM_LAYOUT_KEYS, len(CUSTOM_SLOT_SCAN_CODES))
+            for value in raw_cleared:
+                try:
+                    index = int(value)
+                except (TypeError, ValueError):
+                    continue
+                if 0 <= index < slot_count:
+                    cleared_slots.add(index)
+
+        return {
+            "type": "grid",
+            "rows": rows,
+            "cols": cols,
+            "key_bindings": key_bindings,
+            "cleared_slots": sorted(cleared_slots),
+        }
+
+    def _load_slot_layouts_from_settings(self):
+        """Load layout presets from settings and ensure a default exists."""
+        layouts = {
+            DEFAULT_SLOT_LAYOUT_NAME: self._default_slot_layout_definition(),
+        }
+
+        raw_layouts = self.global_settings.get("slot_layouts", {})
+        if not isinstance(raw_layouts, dict):
+            return layouts
+
+        for layout_name, layout_definition in raw_layouts.items():
+            clean_name = self._sanitize_layout_name(layout_name)
+            if not clean_name or clean_name == DEFAULT_SLOT_LAYOUT_NAME:
+                continue
+
+            normalized = self._normalize_custom_layout_definition(layout_definition)
+            if normalized:
+                layouts[clean_name] = normalized
+
+        return layouts
+
+    def _persist_slot_layout_settings(self):
+        """Persist slot layouts and active layout into global settings."""
+        custom_layouts = {
+            name: definition
+            for name, definition in self.slot_layouts.items()
+            if name != DEFAULT_SLOT_LAYOUT_NAME
+        }
+
+        self.global_settings["slot_layouts"] = custom_layouts
+        self.global_settings["active_slot_layout"] = self.active_slot_layout_name
+        self.save_global_settings()
+
+    def _build_slot_entries_for_layout(self, layout_name):
+        """Build slot tuple entries matching NumpadSlot constructor format."""
+        layout_definition = self.slot_layouts.get(layout_name)
+        if not layout_definition:
+            layout_definition = self._default_slot_layout_definition()
+
+        if layout_definition.get("type") == "default_numpad":
+            return [(scan, label, row, col, rowspan, colspan, False) for scan, label, row, col, rowspan, colspan in NUMPAD_LAYOUT]
+
+        if layout_definition.get("type") == "grid":
+            rows = int(layout_definition.get("rows", 1))
+            cols = int(layout_definition.get("cols", 1))
+            slot_count = min(rows * cols, MAX_CUSTOM_LAYOUT_KEYS, len(CUSTOM_SLOT_SCAN_CODES))
+            key_bindings = layout_definition.get("key_bindings", {}) if isinstance(layout_definition, dict) else {}
+            cleared_slots = set()
+            raw_cleared = layout_definition.get("cleared_slots", []) if isinstance(layout_definition, dict) else []
+            if not isinstance(raw_cleared, list) and isinstance(layout_definition, dict):
+                raw_cleared = layout_definition.get("hidden_slots", [])  # backward compatibility
+            if isinstance(raw_cleared, list):
+                for value in raw_cleared:
+                    try:
+                        cleared_slots.add(int(value))
+                    except (TypeError, ValueError):
+                        continue
+            entries = []
+            for index in range(slot_count):
+                row = index // cols
+                col = index % cols
+                default_scan_code = str(CUSTOM_SLOT_SCAN_CODES[index])
+                default_label = str(index + 1)
+                hidden = index in cleared_slots
+
+                binding = key_bindings.get(str(index), {}) if isinstance(key_bindings, dict) else {}
+                scan_code = str(binding.get("scan_code", default_scan_code)).strip() or default_scan_code
+                label = str(binding.get("label", default_label)).strip() or default_label
+                entries.append((scan_code, label, row, col, 1, 1, hidden))
+            return entries
+
+        return [(scan, label, row, col, rowspan, colspan, False) for scan, label, row, col, rowspan, colspan in NUMPAD_LAYOUT]
 
     def _load_runtime_plugin_data(self):
         """Load merged runtime plugin data into app state."""
@@ -610,6 +908,12 @@ class StratagemApp(QMainWindow):
         self.nav_home_btn.clicked.connect(self.show_main_section)
         nav_layout.addWidget(self.nav_home_btn)
 
+        self.nav_slots_btn = QPushButton()
+        self.nav_slots_btn.setObjectName("nav_icon_btn")
+        self.nav_slots_btn.setToolTip("Slot Layouts")
+        self.nav_slots_btn.clicked.connect(self.show_slots_section)
+        nav_layout.addWidget(self.nav_slots_btn)
+
         nav_layout.addStretch(1)
 
         self.nav_settings_btn = QPushButton()
@@ -631,6 +935,7 @@ class StratagemApp(QMainWindow):
         nav_buttons = [
             self.nav_toggle_btn,
             self.nav_home_btn,
+            self.nav_slots_btn,
             self.nav_settings_btn,
         ]
         for btn in nav_buttons:
@@ -653,10 +958,12 @@ class StratagemApp(QMainWindow):
         if self.nav_expanded:
             self.nav_toggle_btn.setText("☰  Menu")
             self.nav_home_btn.setText("☠  Helldivers")
+            self.nav_slots_btn.setText("⌗  Slots")
             self.nav_settings_btn.setText("⚙  Settings")
         else:
             self.nav_toggle_btn.setText("☰")
             self.nav_home_btn.setText("☠")
+            self.nav_slots_btn.setText("⌗")
             self.nav_settings_btn.setText("⚙")
 
     def toggle_left_nav_bar(self):
@@ -670,12 +977,116 @@ class StratagemApp(QMainWindow):
         """Show default commander section."""
         if hasattr(self, "content_stack"):
             self.content_stack.setCurrentIndex(0)
+        self._apply_commander_layout_mode()
         if hasattr(self, "top_bar_widget"):
             self.top_bar_widget.show()
         if hasattr(self, "status_label"):
             self.status_label.show()
         if hasattr(self, "status_spacer"):
             self.status_spacer.show()
+        self._schedule_main_window_adjust()
+
+    def show_slots_section(self):
+        """Show slot layout customization section."""
+        if hasattr(self, "content_stack"):
+            self.content_stack.setCurrentIndex(1)
+        if hasattr(self, "top_bar_widget"):
+            self.top_bar_widget.hide()
+        if hasattr(self, "status_label"):
+            self.status_label.show()
+        if hasattr(self, "status_spacer"):
+            self.status_spacer.show()
+        self._schedule_slots_window_adjust()
+
+    def _schedule_slots_window_adjust(self):
+        """Debounced schedule for Slots-window auto-adjust during rapid UI updates."""
+        if hasattr(self, "slots_resize_timer"):
+            self.slots_resize_timer.start()
+
+    def _schedule_main_window_adjust(self):
+        """Debounced schedule for Main-tab auto-adjust when slots may be clipped."""
+        if hasattr(self, "main_resize_timer"):
+            self.main_resize_timer.start()
+
+    def _auto_adjust_window_for_main_slots(self):
+        """Grow window if main-tab slot grid area is clipped by current window size."""
+        if not hasattr(self, "content_stack") or not hasattr(self, "grid_container"):
+            return
+        if self.content_stack.currentIndex() != 0:
+            return
+        if not hasattr(self, "side_container") or not hasattr(self, "commander_layout"):
+            return
+
+        grid_width = self.grid_container.width()
+        grid_height = self.grid_container.height()
+        side_hint = self.side_container.sizeHint()
+        spacing = self.commander_layout.spacing()
+
+        if self.commander_layout.direction() == QBoxLayout.Direction.TopToBottom:
+            required_width = max(grid_width, side_hint.width())
+            required_height = grid_height + side_hint.height() + max(0, spacing)
+        else:
+            required_width = grid_width + side_hint.width() + max(0, spacing)
+            required_height = max(grid_height, side_hint.height())
+
+        available = self.content_stack.size()
+        delta_w = required_width - available.width()
+        delta_h = required_height - available.height()
+
+        # Only grow when content is clipped.
+        if delta_w <= 0 and delta_h <= 0:
+            return
+
+        target_w = self.width() + max(0, delta_w)
+        target_h = self.height() + max(0, delta_h)
+
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen:
+            geometry = screen.availableGeometry()
+            target_w = min(target_w, geometry.width())
+            target_h = min(target_h, geometry.height())
+
+        self.resize(int(target_w), int(target_h))
+
+    def _auto_adjust_window_for_slots_preview(self):
+        """Auto-adjust window size to fit slots preview content (grow and shrink)."""
+        if not hasattr(self, "content_stack") or not hasattr(self, "slots_customization_widget"):
+            return
+        if self.content_stack.currentIndex() != 1:
+            return
+
+        self.slots_customization_widget.adjustSize()
+        required = self.slots_customization_widget.sizeHint()
+        available = self.content_stack.size()
+
+        delta_w = required.width() - available.width()
+        delta_h = required.height() - available.height()
+
+        # Avoid tiny jitter resizes from sizeHint fluctuations.
+        if abs(delta_w) <= 4:
+            delta_w = 0
+        if abs(delta_h) <= 4:
+            delta_h = 0
+
+        if delta_w == 0 and delta_h == 0:
+            return
+
+        target_w = self.width() + delta_w
+        target_h = self.height() + delta_h
+
+        min_height = max(self.minimumHeight(), self.minimumSizeHint().height())
+
+        target_w = max(self.minimumWidth(), int(target_w))
+        target_h = max(min_height, int(target_h))
+
+        # Respect available screen geometry.
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen:
+            geometry = screen.availableGeometry()
+            target_w = min(target_w, geometry.width())
+            target_h = min(target_h, geometry.height())
+
+        self.resize(target_w, target_h)
 
     def _load_app_icon(self):
         """Load application icon"""
@@ -796,14 +1207,62 @@ class StratagemApp(QMainWindow):
         self.content_stack = QStackedWidget()
 
         commander_widget = QWidget()
-        commander_layout = QHBoxLayout(commander_widget)
-        commander_layout.setContentsMargins(0, 0, 0, 0)
-        commander_layout.setSpacing(0)
-        self._create_sidebar(commander_layout)
-        self._create_numpad_grid(commander_layout)
+        self.commander_layout = QBoxLayout(QBoxLayout.Direction.LeftToRight, commander_widget)
+        self.commander_layout.setContentsMargins(0, 0, 0, 0)
+        self.commander_layout.setSpacing(0)
+        self._create_sidebar(self.commander_layout)
+        self._create_numpad_grid(self.commander_layout)
+        self._apply_commander_layout_mode()
         self.content_stack.addWidget(commander_widget)
 
+        slots_widget = self._create_slots_customization_section()
+        self.content_stack.addWidget(slots_widget)
+
         main_layout.addWidget(self.content_stack)
+
+    def _should_use_vertical_commander_layout(self):
+        """Return True when slots should appear above list on main tab."""
+        definition = self.slot_layouts.get(self.active_slot_layout_name, {})
+        if definition.get("type") != "grid":
+            return False
+
+        rows, cols = self._clamp_picker_size(
+            definition.get("rows", 1),
+            definition.get("cols", 1),
+        )
+        # Short-and-wide layouts should stack vertically: slots on top, list below.
+        return rows < 3 and cols > rows
+
+    def _apply_commander_layout_mode(self):
+        """Apply main-tab layout orientation/order based on active slot layout dimensions."""
+        if not hasattr(self, "commander_layout"):
+            return
+        if not hasattr(self, "side_container") or not hasattr(self, "grid_container"):
+            return
+
+        vertical_mode = self._should_use_vertical_commander_layout()
+        desired_direction = (
+            QBoxLayout.Direction.TopToBottom
+            if vertical_mode
+            else QBoxLayout.Direction.LeftToRight
+        )
+        self.commander_layout.setDirection(desired_direction)
+
+        while self.commander_layout.count():
+            self.commander_layout.takeAt(0)
+
+        if vertical_mode:
+            self.commander_layout.addWidget(self.grid_container, 0, Qt.AlignmentFlag.AlignHCenter)
+            self.commander_layout.addWidget(self.side_container, 1)
+        else:
+            self.commander_layout.addWidget(self.side_container, 1)
+            self.commander_layout.addWidget(self.grid_container, 0)
+
+        # Recompute header widths after Qt finishes relayout, so department headers
+        # always span the full visible list width.
+        QTimer.singleShot(0, self.update_header_widths)
+        QTimer.singleShot(60, self.update_header_widths)
+        self._schedule_main_window_adjust()
 
     def _create_plugins_main_section(self):
         """Create plugin management section shown from left navigation."""
@@ -1442,6 +1901,7 @@ class StratagemApp(QMainWindow):
         self.icon_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.icon_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.icon_list.installEventFilter(self)
+        self.icon_list.viewport().installEventFilter(self)
         
         self.icon_widgets = []
         self.icon_items = []
@@ -1481,20 +1941,654 @@ class StratagemApp(QMainWindow):
 
     def _create_numpad_grid(self, content_layout):
         """Create the numpad grid layout"""
-        grid = QGridLayout()
+        self.grid_container = QWidget()
+        self.grid_container_layout = QVBoxLayout(self.grid_container)
+        self.grid_container_layout.setContentsMargins(0, 0, 0, 0)
+        self.grid_container_layout.setSpacing(0)
+        self.numpad_grid_widget = None
+        self.grid_container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+        content_layout.addWidget(self.grid_container)
+        self.apply_slot_layout(self.active_slot_layout_name, show_status=False)
+
+    def _create_slots_customization_section(self):
+        """Create slot layout customization page."""
+        slots_widget = QWidget()
+        self.slots_customization_widget = slots_widget
+        layout = QVBoxLayout(slots_widget)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+
+        title = QLabel("Slot Layout Customization")
+        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        layout.addWidget(title)
+
+        subtitle = QLabel("Choose, save, and apply slot grid layouts (up to 21 keys)")
+        subtitle.setStyleSheet("color: #aaa; font-size: 11px;")
+        layout.addWidget(subtitle)
+
+        self.slot_layout_box = DeletableComboBox()
+        self.slot_layout_box.setObjectName("profile_box_styled")
+        self.slot_layout_box.currentIndexChanged.connect(self.slot_layout_changed)
+        self.slot_layout_box.deleteRequested.connect(self.delete_slot_layout_from_select)
+
+        main_row = QHBoxLayout()
+        main_row.setSpacing(18)
+
+        left_panel = QVBoxLayout()
+        left_panel.setSpacing(10)
+
+        left_panel.addWidget(self.slot_layout_box)
+
+        self.grid_size_label = QLabel("")
+        self.grid_size_label.setStyleSheet("color: #ddd;")
+        left_panel.addWidget(self.grid_size_label)
+
+        self.grid_picker_button = QPushButton("Pick Grid Size")
+        self.grid_picker_button.setToolTip("Hover to open grid picker")
+        self.grid_picker_button.installEventFilter(self)
+        left_panel.addWidget(self.grid_picker_button, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        self.grid_picker_hint_label = QLabel("The absolute maximum stratagem in a mission is 20.")
+        self.grid_picker_hint_label.setStyleSheet("color: #888; font-size: 10px;")
+        left_panel.addWidget(self.grid_picker_hint_label, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        self.save_slot_layout_btn = QPushButton("Save Layout")
+        self.save_slot_layout_btn.clicked.connect(self.save_slot_layout_from_picker)
+        left_panel.addWidget(self.save_slot_layout_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+        left_panel.addStretch(1)
+
+        main_row.addLayout(left_panel, 0)
+
+        right_panel = QVBoxLayout()
+        right_panel.setSpacing(8)
+        preview_title = QLabel("Layout Preview")
+        preview_title.setStyleSheet("font-weight: bold; color: #ddd;")
+        right_panel.addWidget(preview_title)
+
+        self.slot_layout_preview = QWidget()
+        self.slot_layout_preview_layout = QGridLayout(self.slot_layout_preview)
+        self.slot_layout_preview_layout.setContentsMargins(0, 0, 0, 0)
+        self.slot_layout_preview_layout.setHorizontalSpacing(10)
+        self.slot_layout_preview_layout.setVerticalSpacing(10)
+        self.preview_slot_cells = []
+        right_panel.addWidget(self.slot_layout_preview, alignment=Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        right_panel.addStretch(1)
+
+        main_row.addLayout(right_panel, 1)
+        layout.addLayout(main_row, 1)
+
+        self.grid_picker_popup = QWidget(slots_widget)
+        self.grid_picker_popup.setObjectName("grid_picker_popup")
+        self.grid_picker_popup.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.grid_picker_popup.setStyleSheet(
+            "QWidget#grid_picker_popup {"
+            "background: #111; border: 1px solid #3a3a3a; border-radius: 8px;"
+            "}"
+        )
+        self.grid_picker_popup.installEventFilter(self)
+        picker_layout = QGridLayout(self.grid_picker_popup)
+        picker_layout.setContentsMargins(8, 8, 8, 8)
+        picker_layout.setHorizontalSpacing(6)
+        picker_layout.setVerticalSpacing(6)
+
+        self.grid_picker_cells = []
+        for row in range(GRID_PICKER_MAX_ROWS):
+            for col in range(GRID_PICKER_MAX_COLS):
+                cell = QPushButton("")
+                cell.setFixedSize(26, 26)
+                cell.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+                cell.setProperty("grid_picker_row", row)
+                cell.setProperty("grid_picker_col", col)
+                cell.installEventFilter(self)
+                picker_layout.addWidget(cell, row, col)
+                self.grid_picker_cells.append(cell)
+
+        self.grid_picker_popup.adjustSize()
+        self.grid_picker_popup.hide()
+
+        self.refresh_slot_layouts_select()
+        self._refresh_grid_picker_highlight()
+        self._update_grid_size_label()
+        self._refresh_slot_layout_preview()
+        return slots_widget
+
+    def _position_grid_picker_popup(self):
+        """Position floating picker popup below picker button with viewport clamping."""
+        if not hasattr(self, "grid_picker_popup") or not hasattr(self, "grid_picker_button"):
+            return
+        if not hasattr(self, "slots_customization_widget"):
+            return
+
+        self.grid_picker_popup.adjustSize()
+
+        popup_size = self.grid_picker_popup.sizeHint()
+        button_pos = self.grid_picker_button.mapTo(self.slots_customization_widget, QPoint(0, self.grid_picker_button.height()))
+
+        max_x = max(8, self.slots_customization_widget.width() - popup_size.width() - 8)
+        max_y = max(8, self.slots_customization_widget.height() - popup_size.height() - 8)
+        x = min(max(8, button_pos.x()), max_x)
+        y = min(max(8, button_pos.y()), max_y)
+        self.grid_picker_popup.move(x, y)
+
+    def _is_cursor_inside_grid_picker_zone(self):
+        """Return True if cursor is over picker button or popup."""
+        if not hasattr(self, "grid_picker_button") or not hasattr(self, "grid_picker_popup"):
+            return False
+
+        cursor_pos = QCursor.pos()
+        button_local = self.grid_picker_button.mapFromGlobal(cursor_pos)
+        if self.grid_picker_button.rect().contains(button_local):
+            return True
+
+        if self.grid_picker_popup.isVisible():
+            popup_local = self.grid_picker_popup.mapFromGlobal(cursor_pos)
+            if self.grid_picker_popup.rect().contains(popup_local):
+                return True
+
+        return False
+
+    def _hide_grid_picker_popup_if_outside(self):
+        """Hide floating picker only after mouse fully leaves picker zone."""
+        if not hasattr(self, "grid_picker_popup"):
+            return
+        if self._is_cursor_inside_grid_picker_zone():
+            return
+
+        self.grid_picker_popup.hide()
+        self.grid_picker_preview_size = None
+        self._refresh_grid_picker_highlight()
+        self._update_grid_size_label()
+        self._refresh_slot_layout_preview()
+
+    def _schedule_grid_picker_close(self):
+        """Schedule delayed picker close to allow button→popup hover transition."""
+        if hasattr(self, "grid_picker_close_timer"):
+            self.grid_picker_close_timer.start()
+
+    def _cancel_grid_picker_close(self):
+        """Cancel pending picker close."""
+        if hasattr(self, "grid_picker_close_timer") and self.grid_picker_close_timer.isActive():
+            self.grid_picker_close_timer.stop()
+
+    def _update_grid_size_label(self, preview_rows=None, preview_cols=None):
+        """Refresh textual display for selected grid size."""
+        rows = preview_rows if preview_rows is not None else self.grid_picker_selected_rows
+        cols = preview_cols if preview_cols is not None else self.grid_picker_selected_cols
+        key_count = rows * cols
+        self.grid_size_label.setText(f"Grid: {rows} × {cols} ({key_count} keys)")
+
+    def _refresh_grid_picker_highlight(self):
+        """Refresh picker hover/selected colors."""
+        if self.grid_picker_preview_size:
+            active_rows, active_cols = self.grid_picker_preview_size
+        else:
+            active_rows, active_cols = self.grid_picker_selected_rows, self.grid_picker_selected_cols
+
+        for cell in self.grid_picker_cells:
+            row = int(cell.property("grid_picker_row"))
+            col = int(cell.property("grid_picker_col"))
+            is_allowed_endpoint = ((row + 1) * (col + 1)) <= MAX_CUSTOM_LAYOUT_KEYS
+            selected = row < active_rows and col < active_cols
+
+            if not is_allowed_endpoint:
+                cell.setStyleSheet("background: #111111; border: 1px solid #1f1f1f; border-radius: 4px;")
+            elif selected:
+                cell.setStyleSheet("background: #4bbf8a; border: 1px solid #3a9f72; border-radius: 4px;")
+            else:
+                cell.setStyleSheet("background: #1a1a1a; border: 1px solid #3a3a3a; border-radius: 4px;")
+
+    def _refresh_slot_layout_preview(self, preview_rows=None, preview_cols=None):
+        """Rebuild a compact preview of the current picker selection."""
+        if not hasattr(self, "slot_layout_preview_layout"):
+            return
+
+        rows = preview_rows if preview_rows is not None else self.grid_picker_selected_rows
+        cols = preview_cols if preview_cols is not None else self.grid_picker_selected_cols
+
+        if not hasattr(self, "preview_slot_cells"):
+            self.preview_slot_cells = []
+        self.preview_slot_cells = []
+
+        selected_name = self.slot_layout_box.currentText() if hasattr(self, "slot_layout_box") else ""
+        is_new_layout_mode = selected_name == NEW_LAYOUT_OPTION_LABEL
+        editable_mode = is_new_layout_mode or self.active_slot_layout_name != DEFAULT_SLOT_LAYOUT_NAME
+
+        key_bindings = self.pending_layout_key_bindings if isinstance(self.pending_layout_key_bindings, dict) else {}
+        cleared_slots = self.pending_cleared_slot_indexes if isinstance(self.pending_cleared_slot_indexes, set) else set()
+
+        while self.slot_layout_preview_layout.count():
+            item = self.slot_layout_preview_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+        key_count = rows * cols
+        for index in range(key_count):
+            row = index // cols
+            col = index % cols
+            preview_cell = QWidget()
+            preview_cell.setFixedSize(82, 82)
+            preview_cell.setCursor(Qt.CursorShape.PointingHandCursor if editable_mode else Qt.CursorShape.ArrowCursor)
+            preview_cell.setProperty("preview_slot_index", index)
+            preview_cell.setProperty("preview_slot_editable", editable_mode)
+            preview_cell.installEventFilter(self)
+
+            is_cleared = index in cleared_slots
+            if is_cleared:
+                preview_cell.setStyleSheet(
+                    "QWidget { border: 2px dashed #444; background: transparent; border-radius: 8px; } "
+                    "QWidget:hover { border: 2px dashed #444; background: transparent; }"
+                )
+            else:
+                preview_cell.setStyleSheet(
+                    "QWidget { border: 2px dashed #444; background: #0a0a0a; border-radius: 8px; "
+                    "color: #888; font-weight: bold; } "
+                    "QWidget:hover { border: 2px solid #ffcc00; background: #151515; }"
+                )
+
+            preview_layout = QVBoxLayout(preview_cell)
+            preview_layout.setContentsMargins(0, 0, 0, 0)
+            preview_layout.setSpacing(0)
+
+            binding = key_bindings.get(str(index), {}) if isinstance(key_bindings, dict) else {}
+            if not is_cleared:
+                label_text = str(binding.get("label", str(index + 1)))
+                cell_label = QLabel(label_text)
+                cell_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                preview_layout.addWidget(cell_label)
+
+            if is_cleared and editable_mode:
+                add_btn = QPushButton("+")
+                add_btn.setToolTip("Add keybind")
+                add_btn.setFixedSize(26, 26)
+                add_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+                add_btn.setFlat(True)
+                add_btn.setStyleSheet(
+                    "font-size: 20px; font-weight: bold; padding: 0px; "
+                    "border: none; background: transparent;"
+                )
+                add_btn.clicked.connect(lambda _checked=False, idx=index: self._assign_key_to_preview_slot(idx))
+                preview_layout.addStretch(1)
+                preview_layout.addWidget(add_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+                preview_layout.addStretch(1)
+            elif not is_cleared and editable_mode:
+                clear_btn = QPushButton("🗑", preview_cell)
+                clear_btn.setToolTip("Clear keybind")
+                clear_btn.setFixedSize(20, 20)
+                clear_btn.move(58, 4)
+                clear_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+                clear_btn.setStyleSheet("font-size: 10px; padding: 0px;")
+                clear_btn.hide()
+                clear_btn.clicked.connect(lambda _checked=False, idx=index: self._clear_preview_slot_keybind(idx))
+                preview_cell.clear_btn = clear_btn
+
+            self.preview_slot_cells.append(preview_cell)
+            self.slot_layout_preview_layout.addWidget(preview_cell, row, col)
+
+        self.slot_layout_preview.updateGeometry()
+        self.slots_customization_widget.updateGeometry()
+        self._schedule_slots_window_adjust()
+
+    def _clear_preview_slot_keybind(self, slot_index):
+        """Stage clear-keybind action for a preview slot (applies only after Save Layout)."""
+        selected_name = self.slot_layout_box.currentText() if hasattr(self, "slot_layout_box") else ""
+        is_new_layout_mode = selected_name == NEW_LAYOUT_OPTION_LABEL
+        if self.active_slot_layout_name == DEFAULT_SLOT_LAYOUT_NAME and not is_new_layout_mode:
+            self.show_status("DEFAULT LAYOUT KEYBINDS CANNOT BE CLEARED")
+            return
+
+        if not isinstance(self.pending_cleared_slot_indexes, set):
+            self.pending_cleared_slot_indexes = set()
+
+        self.pending_cleared_slot_indexes.add(slot_index)
+
+        if isinstance(self.pending_layout_key_bindings, dict):
+            self.pending_layout_key_bindings.pop(str(slot_index), None)
+
+        self.show_status(f"SLOT {slot_index + 1} KEYBIND CLEARED (SAVE LAYOUT TO APPLY)")
+
+        self._refresh_slot_layout_preview()
+
+    def _assign_key_to_preview_slot(self, slot_index):
+        """Capture and assign a keyboard key to a preview slot in current custom layout."""
+        selected_name = self.slot_layout_box.currentText() if hasattr(self, "slot_layout_box") else ""
+        is_new_layout_mode = selected_name == NEW_LAYOUT_OPTION_LABEL
+
+        if self.active_slot_layout_name == DEFAULT_SLOT_LAYOUT_NAME and not is_new_layout_mode:
+            self.show_status("DEFAULT LAYOUT KEYS CANNOT BE CHANGED")
+            return
+
+        if is_new_layout_mode:
+            rows = int(self.grid_picker_selected_rows)
+            cols = int(self.grid_picker_selected_cols)
+        else:
+            layout_definition = self.slot_layouts.get(self.active_slot_layout_name)
+            if not isinstance(layout_definition, dict) or layout_definition.get("type") != "grid":
+                return
+            rows = int(layout_definition.get("rows", 1))
+            cols = int(layout_definition.get("cols", 1))
+
+        slot_count = min(rows * cols, MAX_CUSTOM_LAYOUT_KEYS, len(CUSTOM_SLOT_SCAN_CODES))
+        if slot_index < 0 or slot_index >= slot_count:
+            return
+
+        capture_dialog = KeyCaptureDialog(self)
+        if capture_dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        scan_code = capture_dialog.captured_scan_code
+        key_label = capture_dialog.captured_label
+        if not scan_code:
+            return
+
+        key_bindings = dict(self.pending_layout_key_bindings) if isinstance(self.pending_layout_key_bindings, dict) else {}
+
+        for existing_index in range(slot_count):
+            if existing_index == slot_index:
+                continue
+            existing_binding = key_bindings.get(str(existing_index), {})
+            if isinstance(existing_binding, dict) and str(existing_binding.get("scan_code", "")) == scan_code:
+                QMessageBox.warning(
+                    self,
+                    "Assign Key",
+                    f"Key '{key_label}' is already assigned to slot {existing_index + 1}.",
+                )
+                return
+
+        key_bindings[str(slot_index)] = {
+            "scan_code": str(scan_code),
+            "label": str(key_label),
+        }
+        self.pending_layout_key_bindings = key_bindings
+        if isinstance(self.pending_cleared_slot_indexes, set):
+            self.pending_cleared_slot_indexes.discard(slot_index)
+        self._refresh_slot_layout_preview()
+        self.show_status(f"SLOT {slot_index + 1} KEY STAGED: {key_label} (SAVE LAYOUT TO APPLY)")
+
+    def refresh_slot_layouts_select(self):
+        """Refresh layout combo preserving active selection."""
+        if not hasattr(self, "slot_layout_box"):
+            return
+
+        current_name = self.active_slot_layout_name
+        self.slot_layout_box.blockSignals(True)
+        self.slot_layout_box.clear()
+
+        ordered_layouts = [DEFAULT_SLOT_LAYOUT_NAME] + sorted(
+            [name for name in self.slot_layouts.keys() if name != DEFAULT_SLOT_LAYOUT_NAME]
+        )
+        for layout_name in ordered_layouts:
+            self.slot_layout_box.addItem(layout_name)
+            deletable = layout_name != DEFAULT_SLOT_LAYOUT_NAME
+            self.slot_layout_box.setItemDeletable(self.slot_layout_box.count() - 1, deletable)
+
+        self.slot_layout_box.addItem(NEW_LAYOUT_OPTION_LABEL)
+        self.slot_layout_box.setItemDeletable(self.slot_layout_box.count() - 1, False)
+
+        target_index = self.slot_layout_box.findText(current_name)
+        if target_index < 0:
+            target_index = self.slot_layout_box.findText(DEFAULT_SLOT_LAYOUT_NAME)
+        if target_index >= 0:
+            self.slot_layout_box.setCurrentIndex(target_index)
+
+        self.slot_layout_box.blockSignals(False)
+        self._sync_picker_from_active_layout()
+
+    def _sync_picker_from_active_layout(self):
+        """Update picker state from currently active layout definition."""
+        active_definition = self.slot_layouts.get(self.active_slot_layout_name, {})
+        if active_definition.get("type") == "grid":
+            rows = int(active_definition.get("rows", 4))
+            cols = int(active_definition.get("cols", 4))
+            active_bindings = active_definition.get("key_bindings", {}) if isinstance(active_definition, dict) else {}
+            self.pending_layout_key_bindings = dict(active_bindings) if isinstance(active_bindings, dict) else {}
+            active_cleared_slots = active_definition.get("cleared_slots", []) if isinstance(active_definition, dict) else []
+            if not isinstance(active_cleared_slots, list) and isinstance(active_definition, dict):
+                active_cleared_slots = active_definition.get("hidden_slots", [])  # backward compatibility
+            if isinstance(active_cleared_slots, list):
+                self.pending_cleared_slot_indexes = {
+                    int(index)
+                    for index in active_cleared_slots
+                    if isinstance(index, int) or (isinstance(index, str) and index.strip().isdigit())
+                }
+            else:
+                self.pending_cleared_slot_indexes = set()
+        else:
+            default_preview = self._default_numpad_preview_template()
+            rows = int(default_preview.get("rows", 5))
+            cols = int(default_preview.get("cols", 4))
+            self.pending_layout_key_bindings = dict(default_preview.get("key_bindings", {}))
+            self.pending_cleared_slot_indexes = set(default_preview.get("cleared_slots", []))
+
+        self.grid_picker_selected_rows, self.grid_picker_selected_cols = self._clamp_picker_size(rows, cols)
+
+        self.grid_picker_preview_size = None
+        self._refresh_grid_picker_highlight()
+        self._update_grid_size_label()
+        self._refresh_slot_layout_preview()
+
+    def slot_layout_changed(self):
+        """Apply selected layout from combo box."""
+        if not hasattr(self, "slot_layout_box"):
+            return
+
+        selected_name = self._sanitize_layout_name(self.slot_layout_box.currentText())
+        if not selected_name:
+            return
+
+        if selected_name == NEW_LAYOUT_OPTION_LABEL:
+            self.pending_layout_key_bindings = {}
+            slot_count = min(
+                int(self.grid_picker_selected_rows) * int(self.grid_picker_selected_cols),
+                MAX_CUSTOM_LAYOUT_KEYS,
+                len(CUSTOM_SLOT_SCAN_CODES),
+            )
+            self.pending_cleared_slot_indexes = set(range(slot_count))
+            self._refresh_slot_layout_preview()
+            self.show_status("NEW LAYOUT MODE: SET GRID/KEYS THEN SAVE")
+            return
+
+        self.apply_slot_layout(selected_name)
+        self._sync_picker_from_active_layout()
+
+    def save_slot_layout_from_picker(self):
+        """Save picker dimensions as a named custom layout."""
+        rows = int(self.grid_picker_selected_rows)
+        cols = int(self.grid_picker_selected_cols)
+        key_count = rows * cols
+        if key_count < 1 or key_count > MAX_CUSTOM_LAYOUT_KEYS:
+            QMessageBox.warning(self, "Save Layout", f"Grid size must be between 1 and {MAX_CUSTOM_LAYOUT_KEYS} keys.")
+            return
+
+        selected_name = self._sanitize_layout_name(self.slot_layout_box.currentText()) if hasattr(self, "slot_layout_box") else ""
+        creating_new_layout = selected_name == NEW_LAYOUT_OPTION_LABEL
+
+        slot_count = min(rows * cols, MAX_CUSTOM_LAYOUT_KEYS, len(CUSTOM_SLOT_SCAN_CODES))
+        staged_cleared_slots = []
+        if isinstance(self.pending_cleared_slot_indexes, set):
+            staged_cleared_slots = sorted(
+                index
+                for index in self.pending_cleared_slot_indexes
+                if isinstance(index, int) and 0 <= index < slot_count
+            )
+
+        assigned_count = slot_count - len(staged_cleared_slots)
+        if assigned_count < 1:
+            QMessageBox.warning(
+                self,
+                "Save Layout",
+                "Layout must have at least 1 assigned key before saving.",
+            )
+            return
+
+        if creating_new_layout:
+            name, ok = QInputDialog.getText(
+                self,
+                "Save Layout",
+                "Layout name:",
+                text="My Layout",
+            )
+            if not ok:
+                return
+
+            clean_name = self._sanitize_layout_name(name)
+            if not clean_name:
+                QMessageBox.warning(self, "Save Layout", "Layout name is required.")
+                return
+            if clean_name == DEFAULT_SLOT_LAYOUT_NAME:
+                QMessageBox.warning(self, "Save Layout", "The default layout name is reserved.")
+                return
+
+            if clean_name in self.slot_layouts:
+                overwrite = QMessageBox.question(
+                    self,
+                    "Overwrite Layout",
+                    f"Layout '{clean_name}' already exists. Overwrite it?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if overwrite != QMessageBox.StandardButton.Yes:
+                    return
+            target_layout_name = clean_name
+        else:
+            target_layout_name = selected_name
+            if target_layout_name in ("", DEFAULT_SLOT_LAYOUT_NAME):
+                QMessageBox.warning(
+                    self,
+                    "Save Layout",
+                    "Default layout cannot be overwritten. Select 'New Layout...' to create one.",
+                )
+                return
+
+        staged_bindings = {}
+        if isinstance(self.pending_layout_key_bindings, dict):
+            slot_count = min(rows * cols, MAX_CUSTOM_LAYOUT_KEYS, len(CUSTOM_SLOT_SCAN_CODES))
+            for key, binding in self.pending_layout_key_bindings.items():
+                try:
+                    index = int(key)
+                except (TypeError, ValueError):
+                    continue
+                if index < 0 or index >= slot_count:
+                    continue
+                if not isinstance(binding, dict):
+                    continue
+                scan_code = str(binding.get("scan_code", "")).strip()
+                if not scan_code:
+                    continue
+                label = str(binding.get("label", "")).strip() or f"Key {index + 1}"
+                staged_bindings[str(index)] = {
+                    "scan_code": scan_code,
+                    "label": label,
+                }
+
+        self.slot_layouts[target_layout_name] = {
+            "type": "grid",
+            "rows": rows,
+            "cols": cols,
+            "key_bindings": staged_bindings,
+            "cleared_slots": staged_cleared_slots,
+        }
+        self.active_slot_layout_name = target_layout_name
+        self._persist_slot_layout_settings()
+        self.refresh_slot_layouts_select()
+        self.apply_slot_layout(target_layout_name)
+        self.show_status("SLOT LAYOUT SAVED")
+
+    def delete_slot_layout_from_select(self, layout_name, _index=None, _user_data=None):
+        """Delete a custom slot layout from selector after confirmation."""
+        clean_name = self._sanitize_layout_name(layout_name)
+        if not clean_name or clean_name in (DEFAULT_SLOT_LAYOUT_NAME, NEW_LAYOUT_OPTION_LABEL):
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Delete Layout",
+            f"Delete layout '{clean_name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        self.slot_layouts.pop(clean_name, None)
+        if self.active_slot_layout_name == clean_name:
+            self.active_slot_layout_name = DEFAULT_SLOT_LAYOUT_NAME
+
+        self._persist_slot_layout_settings()
+        self.refresh_slot_layouts_select()
+        self.apply_slot_layout(self.active_slot_layout_name)
+        self.show_status("SLOT LAYOUT DELETED")
+
+    def apply_slot_layout(self, layout_name, show_status=True):
+        """Apply a named slot layout to the main commander grid."""
+        clean_name = self._sanitize_layout_name(layout_name)
+        if clean_name not in self.slot_layouts:
+            clean_name = DEFAULT_SLOT_LAYOUT_NAME
+
+        previous_assignments = {
+            code: slot.assigned_stratagem
+            for code, slot in self.slots.items()
+            if slot.assigned_stratagem
+        }
+
+        self.active_slot_layout_name = clean_name
+        entries = self._build_slot_entries_for_layout(clean_name)
+        self._rebuild_numpad_grid(entries)
+        self._apply_commander_layout_mode()
+
+        for code, stratagem in previous_assignments.items():
+            if code in self.slots and not getattr(self.slots[code], "is_hidden", False):
+                self.slots[code].assign(stratagem)
+
+        self._persist_slot_layout_settings()
+        self.on_change()
+        if show_status:
+            self.show_status(f"LAYOUT APPLIED: {clean_name.upper()}")
+
+    def _rebuild_numpad_grid(self, slot_entries):
+        """Rebuild the active slot grid widget from provided entries."""
+        self.slots = {}
+
+        if self.numpad_grid_widget is not None:
+            self.grid_container_layout.removeWidget(self.numpad_grid_widget)
+            self.numpad_grid_widget.deleteLater()
+
+        grid_widget = QWidget()
+        grid = QGridLayout(grid_widget)
         grid.setSpacing(12)
-        
-        for scan_code, label, row, col, rowspan, colspan in NUMPAD_LAYOUT:
+
+        max_row = 0
+        max_col = 0
+        for entry in slot_entries:
+            if len(entry) >= 7:
+                scan_code, label, row, col, rowspan, colspan, hidden = entry
+            else:
+                scan_code, label, row, col, rowspan, colspan = entry
+                hidden = False
             slot = NumpadSlot(scan_code, label, self)
+            slot.set_hidden(bool(hidden))
             grid.addWidget(slot, row, col, rowspan, colspan)
-            self.slots[scan_code] = slot
-        
-        grid_container = QWidget()
-        grid_container.setLayout(grid)
-        grid_container.setFixedSize(396, 498)
-        grid_container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        
-        content_layout.addWidget(grid_container)
+            self.slots[str(scan_code)] = slot
+            max_row = max(max_row, row + rowspan)
+            max_col = max(max_col, col + colspan)
+
+        if self.active_slot_layout_name == DEFAULT_SLOT_LAYOUT_NAME:
+            grid_widget.setFixedSize(NUMPAD_GRID_WIDTH, NUMPAD_GRID_HEIGHT)
+            self.grid_container.setFixedSize(NUMPAD_GRID_WIDTH, NUMPAD_GRID_HEIGHT)
+        else:
+            cell_width = 82
+            cell_height = 82
+            spacing = grid.spacing()
+            margins = grid.contentsMargins()
+            width = (max_col * cell_width) + max(0, max_col - 1) * spacing + margins.left() + margins.right()
+            height = (max_row * cell_height) + max(0, max_row - 1) * spacing + margins.top() + margins.bottom()
+            grid_widget.setFixedSize(max(140, width), max(140, height))
+            self.grid_container.setFixedSize(max(140, width), max(140, height))
+
+        grid_widget.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.numpad_grid_widget = grid_widget
+        self.grid_container_layout.addWidget(grid_widget)
 
     def _create_bottom_bar(self, main_layout):
         """Create bottom bar with macro toggle"""
@@ -1523,14 +2617,103 @@ class StratagemApp(QMainWindow):
         self.update_search_clear_position()
         self.update_search_width()
         self.update_header_widths()
+        if hasattr(self, "grid_picker_popup") and self.grid_picker_popup.isVisible():
+            self._position_grid_picker_popup()
+        if hasattr(self, "content_stack") and self.content_stack.currentIndex() == 0:
+            self._schedule_main_window_adjust()
 
     def eventFilter(self, source, event):
         """Filter events for search bar and icon list"""
+        if hasattr(self, "preview_slot_cells") and source in self.preview_slot_cells:
+            editable = bool(source.property("preview_slot_editable"))
+
+            if not editable:
+                return False
+
+            if event.type() == QEvent.Type.Enter:
+                clear_btn = getattr(source, "clear_btn", None)
+                if clear_btn is not None:
+                    clear_btn.show()
+                return False
+
+            if event.type() == QEvent.Type.Leave:
+                clear_btn = getattr(source, "clear_btn", None)
+                if clear_btn is not None:
+                    clear_btn.hide()
+                return False
+
+            if event.type() == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+                slot_index = source.property("preview_slot_index")
+                try:
+                    slot_index = int(slot_index)
+                except (TypeError, ValueError):
+                    return False
+                self._assign_key_to_preview_slot(slot_index)
+                return True
+
+        if hasattr(self, "grid_picker_button") and source == self.grid_picker_button:
+            if event.type() == QEvent.Type.Enter:
+                self._cancel_grid_picker_close()
+                self._position_grid_picker_popup()
+                self.grid_picker_popup.show()
+                self.grid_picker_popup.raise_()
+                return False
+
+            if event.type() == QEvent.Type.Leave:
+                self._schedule_grid_picker_close()
+                return False
+
+        if hasattr(self, "grid_picker_popup") and source == self.grid_picker_popup:
+            if event.type() == QEvent.Type.Enter:
+                self._cancel_grid_picker_close()
+                return False
+
+            if event.type() == QEvent.Type.Leave:
+                self._schedule_grid_picker_close()
+                return False
+
+        if hasattr(self, "grid_picker_cells") and source in self.grid_picker_cells:
+            row = int(source.property("grid_picker_row"))
+            col = int(source.property("grid_picker_col"))
+            is_allowed_endpoint = ((row + 1) * (col + 1)) <= MAX_CUSTOM_LAYOUT_KEYS
+
+            if event.type() == QEvent.Type.Enter:
+                self._cancel_grid_picker_close()
+                if is_allowed_endpoint:
+                    self.grid_picker_preview_size = (row + 1, col + 1)
+                    self._update_grid_size_label(row + 1, col + 1)
+                    self._refresh_slot_layout_preview(row + 1, col + 1)
+                else:
+                    self.grid_picker_preview_size = None
+                    self._update_grid_size_label()
+                    self._refresh_slot_layout_preview()
+                self._refresh_grid_picker_highlight()
+                return False
+
+            if event.type() == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+                if not is_allowed_endpoint:
+                    return True
+                self.grid_picker_selected_rows = row + 1
+                self.grid_picker_selected_cols = col + 1
+                self.grid_picker_preview_size = None
+                self._refresh_grid_picker_highlight()
+                self._update_grid_size_label()
+                self._refresh_slot_layout_preview()
+                if hasattr(self, "grid_picker_popup"):
+                    self.grid_picker_popup.hide()
+                return True
+
         if hasattr(self, 'search') and source == self.search and event.type() == QEvent.Type.Resize:
             self.update_search_clear_position()
             if self.search.height() != 32:
                 self.search.setFixedHeight(32)
         elif hasattr(self, 'icon_list') and source == self.icon_list and event.type() == QEvent.Type.Resize:
+            self.update_header_widths()
+        elif (
+            hasattr(self, 'icon_list')
+            and source == self.icon_list.viewport()
+            and event.type() == QEvent.Type.Resize
+        ):
             self.update_header_widths()
         return super().eventFilter(source, event)
 

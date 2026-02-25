@@ -93,10 +93,12 @@ class ProfileManager:
             if migrated:
                 data["mappings"] = updated_mappings
 
-            return {
+            result = {
                 "speed": speed,
                 "mappings": updated_mappings
             }
+
+            return result
         except Exception as e:
             print(f"[ProfileManager] Error loading profile from path: {e}")
             return None
