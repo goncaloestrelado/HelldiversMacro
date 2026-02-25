@@ -13,11 +13,11 @@ namespace = {}
 exec(VERSION_PY.read_text(), namespace)
 version_string = namespace['VERSION']  # This gets VERSION from imported module
 
-# Convert "0.2.0" to tuple format (0, 2, 0, 0)
-version_parts = version_string.split('.')
-while len(version_parts) < 4:
-    version_parts.append('0')
-version_tuple = ','.join(v.split('-')[0] for v in version_parts[:4])  # Handle pre-release versions
+# Convert any version string to numeric tuple format (e.g. "beta0.3.0" -> 0,3,0,0)
+numeric_parts = re.findall(r'\d+', version_string)
+while len(numeric_parts) < 4:
+  numeric_parts.append('0')
+version_tuple = ','.join(numeric_parts[:4])
 
 # Create version file content
 version_file_content = f'''# UTF-8
@@ -58,10 +58,10 @@ print(f"[OK] Generated version_file.txt for version {version_string}")
 # Also update app.manifest with the correct version
 manifest_path = Path("app.manifest")
 manifest_content = manifest_path.read_text()
-# Convert version to Windows format (0.2.0 -> 0.2.0.0)
-windows_version = version_string + '.0' if version_string.count('.') == 2 else version_string
+# Convert version to Windows format using numeric components only (beta0.3.0 -> 0.3.0.0)
+windows_version = '.'.join(numeric_parts[:4])
 manifest_content = re.sub(
-    r'version="[\d.]+"',
+  r'version="[\w.-]+"',
     f'version="{windows_version}"',
     manifest_content
 )
