@@ -889,7 +889,7 @@ class StratagemApp(QMainWindow):
         nav_widget = QWidget()
         nav_widget.setObjectName("left_nav_bar")
         self.nav_widget = nav_widget
-        self.nav_expanded = True
+        self.nav_expanded = False
 
         nav_layout = QVBoxLayout(nav_widget)
         nav_layout.setContentsMargins(8, 8, 8, 8)
