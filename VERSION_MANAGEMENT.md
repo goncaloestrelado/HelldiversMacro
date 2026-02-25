@@ -5,7 +5,7 @@
 All version information is now managed from **one location**: [`src/config/version.py`](src/config/version.py)
 
 ```python
-VERSION = "0.2.0"
+VERSION = "beta0.3.0"
 ```
 
 ## How It Works
@@ -62,7 +62,7 @@ Use semantic versioning: `MAJOR.MINOR.PATCH`
 
 The script automatically:
 
-- Converts `0.2.0` → `0.2.0.0` for Windows (adds build number)
+- Converts `beta0.3.0` → `0.3.0.0` for Windows (uses numeric components)
 - Handles pre-release versions (strips suffix after dash)
 
 ## Files Involved

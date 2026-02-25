@@ -52,9 +52,13 @@ def migrate_old_files():
 
 PROFILES_DIR = os.path.join(get_app_data_dir(), "profiles")
 SETTINGS_FILE = os.path.join(get_app_data_dir(), "general.json")
+PLUGINS_DIR = os.path.join(get_app_data_dir(), "plugins")
 ASSETS_DIR = "assets"
 
+_ICON_OVERRIDE_PATHS = {}
+
 os.makedirs(PROFILES_DIR, exist_ok=True)
+os.makedirs(PLUGINS_DIR, exist_ok=True)
 migrate_old_files()
 
 
@@ -82,7 +86,7 @@ def get_install_type():
 
 def get_installer_filename(tag_name):
     """Generate expected installer filename from tag"""
-    return f"HelldiversNumpadMacros-Setup-{tag_name}.exe"
+    return f"Helldivers2StratCommander-Setup-{tag_name}.exe"
 
 
 def is_admin():
@@ -110,6 +114,10 @@ def run_as_admin():
 
 def find_svg_path(name):
     """Find SVG file for stratagem, with simplified lookup since files now match official names"""
+    override_path = _ICON_OVERRIDE_PATHS.get(name)
+    if override_path and os.path.exists(override_path):
+        return override_path
+
     base_path = getattr(sys, '_MEIPASS', os.path.abspath("."))
     assets_lookup = os.path.join(base_path, ASSETS_DIR)
     target = normalize(name)
@@ -120,6 +128,20 @@ def find_svg_path(name):
                 if normalize(os.path.splitext(f)[0]) == target:
                     return os.path.join(root, f)
     return None
+
+
+def set_icon_overrides(overrides):
+    """Set icon override mapping used by find_svg_path."""
+    global _ICON_OVERRIDE_PATHS
+    if not isinstance(overrides, dict):
+        _ICON_OVERRIDE_PATHS = {}
+        return
+
+    _ICON_OVERRIDE_PATHS = {
+        str(name): str(path)
+        for name, path in overrides.items()
+        if isinstance(name, str) and isinstance(path, str)
+    }
 
 
 def get_asset_path(filename):
@@ -165,17 +187,178 @@ def apply_theme_to_stylesheet(qss_content, base_path):
     )
 
 
-def get_theme_stylesheet(theme_name="Dark (Default)"):
+def _normalize_plugin_theme_palette(theme_value):
+    """Normalize plugin theme palette provided via JSON."""
+    if not isinstance(theme_value, dict):
+        return None
+
+    background = theme_value.get("background_color") or theme_value.get("background")
+    border = theme_value.get("border_color") or theme_value.get("border")
+    accent = theme_value.get("accent_color") or theme_value.get("accent")
+
+    normalized = {
+        "background_color": background.strip() if isinstance(background, str) and background.strip() else None,
+        "border_color": border.strip() if isinstance(border, str) and border.strip() else None,
+        "accent_color": accent.strip() if isinstance(accent, str) and accent.strip() else None,
+    }
+
+    if not any(normalized.values()):
+        return None
+
+    if not normalized["border_color"] and normalized["accent_color"]:
+        normalized["border_color"] = normalized["accent_color"]
+    if not normalized["accent_color"] and normalized["border_color"]:
+        normalized["accent_color"] = normalized["border_color"]
+
+    return {
+        "background_color": normalized["background_color"] or "#111111",
+        "border_color": normalized["border_color"] or "#666666",
+        "accent_color": normalized["accent_color"] or "#4a90e2",
+    }
+
+
+def _build_plugin_theme_overlay(palette):
+    """Build constrained QSS overlay for plugin themes."""
+    bg = palette["background_color"]
+    border = palette["border_color"]
+    accent = palette["accent_color"]
+
+    return f"""
+QWidget {{
+    background-color: {bg};
+}}
+
+QFrame, QListWidget, QLineEdit, QComboBox, QPushButton, QToolButton {{
+    border-color: {border};
+}}
+
+QPushButton, QToolButton, QComboBox::drop-down, QSlider::groove:horizontal, QSlider::handle:horizontal {{
+    background-color: {accent};
+}}
+
+QListWidget::item:selected, QComboBox QAbstractItemView::item:selected, QLineEdit:focus {{
+    border-color: {accent};
+}}
+
+QLabel#status_label {{
+    color: {accent};
+    border: 1px solid {accent};
+}}
+
+QWidget[role="icon"]:hover {{
+    border: 1px solid {accent};
+}}
+
+QPushButton[role="action"]:hover {{
+    border: 1px solid {accent};
+}}
+
+QPushButton#menu_button {{
+    color: {accent};
+}}
+
+QPushButton#menu_button:hover {{
+    border: 1px solid {accent};
+}}
+
+QPushButton#nav_toggle_btn, QPushButton#nav_icon_btn, QPushButton#nav_settings_btn {{
+    color: {accent};
+}}
+
+QPushButton#nav_toggle_btn:hover, QPushButton#nav_icon_btn:hover, QPushButton#nav_settings_btn:hover {{
+    border: 1px solid {accent};
+}}
+
+QPushButton#speed_btn:hover {{
+    color: {accent};
+}}
+
+QCheckBox#macros_toggle {{
+    color: {accent};
+}}
+
+QLineEdit#search_input {{
+    color: {accent};
+}}
+
+QToolButton#search_clear_btn {{
+    color: {accent};
+    border: 1px solid {accent};
+}}
+
+QToolButton#search_clear_btn:hover {{
+    border: 1px solid {accent};
+}}
+
+QListWidget#settings_tab_list {{
+    color: {accent};
+}}
+
+QListWidget#settings_tab_list::item:selected {{
+    border-left: 3px solid {accent};
+}}
+
+QWidget[role="numpad-slot"][assigned="false"]:hover {{
+    border: 2px solid {accent};
+}}
+
+QWidget[role="numpad-slot"][assigned="true"] {{
+    border: 2px solid {accent};
+}}
+
+QComboBox#profile_box_styled {{
+    color: {accent};
+    border: 1px solid {accent};
+}}
+
+QComboBox#profile_box_styled:hover {{
+    border: 1px solid {accent};
+}}
+
+QLabel#department_header {{
+    color: {accent};
+    border-bottom: 1px solid {accent};
+    background: rgba(0, 0, 0, 0.2);
+}}
+"""
+
+
+def get_theme_stylesheet(theme_name="Dark (Default)", theme_files=None):
     """Get the stylesheet content for a given theme"""
     try:
-        theme_file = THEME_FILES.get(theme_name, THEME_FILES["Dark (Default)"])
+        effective_theme_files = theme_files if isinstance(theme_files, dict) else THEME_FILES
+        theme_value = effective_theme_files.get(
+            theme_name,
+            effective_theme_files.get("Dark (Default)", THEME_FILES["Dark (Default)"])
+        )
         base_path = getattr(sys, '_MEIPASS', os.path.abspath("."))
-        qss_path = os.path.join(base_path, theme_file)
-        
-        if os.path.exists(qss_path):
-            with open(qss_path, 'r', encoding='utf-8') as f:
-                qss = f.read()
-            return apply_theme_to_stylesheet(qss, base_path)
+
+        if isinstance(theme_value, dict):
+            palette = _normalize_plugin_theme_palette(theme_value)
+
+            base_theme_ref = effective_theme_files.get("Dark (Default)", THEME_FILES["Dark (Default)"])
+            if isinstance(base_theme_ref, dict):
+                base_theme_ref = THEME_FILES["Dark (Default)"]
+
+            base_theme_path = base_theme_ref if os.path.isabs(base_theme_ref) else os.path.join(base_path, base_theme_ref)
+            if not os.path.exists(base_theme_path):
+                return ""
+
+            with open(base_theme_path, 'r', encoding='utf-8') as base_theme_file:
+                base_qss = base_theme_file.read()
+
+            if not palette:
+                return apply_theme_to_stylesheet(base_qss, base_path)
+
+            overlay_qss = _build_plugin_theme_overlay(palette)
+            return apply_theme_to_stylesheet(base_qss + "\n" + overlay_qss, base_path)
+
+        if isinstance(theme_value, str):
+            qss_path = theme_value if os.path.isabs(theme_value) else os.path.join(base_path, theme_value)
+            if os.path.exists(qss_path):
+                with open(qss_path, 'r', encoding='utf-8') as f:
+                    qss = f.read()
+                return apply_theme_to_stylesheet(qss, base_path)
     except Exception as e:
         print(f"[Config] Theme Error: {e}")
     return ""

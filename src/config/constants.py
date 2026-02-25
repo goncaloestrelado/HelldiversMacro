@@ -20,6 +20,7 @@ DEFAULT_SETTINGS = {
     "auto_check_updates": True,
     "autoload_profile": False,
     "theme": "Dark (Default)",
+    "custom_themes": {},
 }
 
 NUMPAD_LAYOUT = [
@@ -63,6 +64,12 @@ KEYBIND_MAPPINGS = {
         "down": "s",
         "left": "a",
         "right": "d"
+    },
+    "esdf": {
+        "up": "e",
+        "down": "d",
+        "left": "s",
+        "right": "f"
     }
 }
 

@@ -2,18 +2,24 @@
 Dialog windows for Helldivers Numpad Macros
 """
 
+import json
+import os
+
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
                              QPushButton, QSpinBox, QListWidget, QStackedWidget,
-                             QComboBox, QCheckBox, QMessageBox, QApplication, QWidget)
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+                             QComboBox, QCheckBox, QMessageBox, QApplication, QWidget,
+                             QInputDialog, QListWidgetItem, QLineEdit, QColorDialog)
+from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtGui import QFont, QDesktopServices
 
 from ..config.constants import ARROW_ICONS
 from ..config.config import is_admin, run_as_admin
 from ..config.version import VERSION, GITHUB_REPO_OWNER, GITHUB_REPO_NAME
 from ..managers import update_checker
+from ..managers.plugin_manager import PluginManager
 from ..managers.update_manager import UpdateDialog, check_for_updates_startup
 from ..config.config import get_install_type
+from .widgets import DeletableComboBox
 from .widgets import comm
 
 
@@ -107,15 +113,94 @@ class SettingsDialog(QDialog):
         self.accept()
 
 
+class PluginGuideDialog(QDialog):
+    """Simple customization pack creation guide dialog."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Customization Pack Guide")
+        self.setObjectName("plugin_guide_dialog")
+        self.setFixedSize(520, 320)
+
+        layout = QVBoxLayout(self)
+
+        title = QLabel("Basic Customization Pack Guide")
+        title.setObjectName("settings_label")
+        layout.addWidget(title)
+
+        guide = QLabel(
+            "1) Open the created JSON file and edit fields like id/name.\n"
+            "2) Add stratagems under stratagems_by_department.\n"
+            "3) Use only up/down/left/right for sequence directions.\n"
+            "4) Add icon_overrides with SVG paths if needed.\n"
+            "5) Add themes with colors.background_color/border_color/accent_color.\n"
+            "6) Save file and restart app to reload customizations."
+        )
+        guide.setWordWrap(True)
+        guide.setStyleSheet("color: #bbb; font-size: 12px; padding: 8px;")
+        layout.addWidget(guide)
+
+        layout.addStretch(1)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        close_btn = QPushButton("Close")
+        close_btn.setObjectName("settings_apply")
+        close_btn.clicked.connect(self.accept)
+        btn_row.addWidget(close_btn)
+        layout.addLayout(btn_row)
+
+
+class PluginListItemWidget(QWidget):
+    """Customization list row with checkbox and hover trash button."""
+
+    def __init__(self, display_text, manifest_path, checked, on_delete_callback, parent=None):
+        super().__init__(parent)
+        self.manifest_path = manifest_path
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(6)
+
+        self.checkbox = QCheckBox(display_text)
+        self.checkbox.setChecked(checked)
+        self.checkbox.setStyleSheet("color: #ddd;")
+        layout.addWidget(self.checkbox, 1)
+
+        self.delete_btn = QPushButton("🗑")
+        self.delete_btn.setObjectName("plugin_delete_btn")
+        self.delete_btn.setToolTip("Remove customization pack")
+        self.delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.delete_btn.setFixedSize(24, 24)
+        self.delete_btn.setStyleSheet(
+            "QPushButton#plugin_delete_btn {"
+            " background: transparent; border: 1px solid #444; border-radius: 4px; color: #ddd; }"
+            "QPushButton#plugin_delete_btn:hover { border: 1px solid #ff4444; color: #ff4444; }"
+        )
+        self.delete_btn.hide()
+        self.delete_btn.clicked.connect(lambda: on_delete_callback(self.manifest_path, display_text))
+        layout.addWidget(self.delete_btn, 0)
+
+    def enterEvent(self, event):
+        self.delete_btn.show()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.delete_btn.hide()
+        super().leaveEvent(event)
+
+
 class SettingsWindow(QDialog):
     """Comprehensive settings window with tabs"""
     
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, initial_tab=0):
         super().__init__(parent)
         self.parent_app = parent
         self.setWindowTitle("Settings")
         self.setFixedSize(600, 400)
         self.setObjectName("settings_window")
+        self.custom_theme_option = "Custom Theme"
+        self.initial_settings_state = {}
         
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -136,6 +221,7 @@ class SettingsWindow(QDialog):
         self.tab_list.addItem("Notifications")
         self.tab_list.addItem("Appearance")
         self.tab_list.addItem("Windows")
+        self.tab_list.addItem("Customizations")
         self.tab_list.itemClicked.connect(self.switch_tab)
         content_layout.addWidget(self.tab_list)
         
@@ -148,12 +234,23 @@ class SettingsWindow(QDialog):
         self._create_notifications_tab()
         self._create_appearance_tab()
         self._create_windows_tab()
+        self._create_plugins_tab()
         
         content_layout.addWidget(self.content_stack)
         main_layout.addLayout(content_layout)
         
         # Bottom buttons
         self._create_bottom_buttons(main_layout)
+
+        if self.tab_list.count() > 0:
+            initial_index = 0
+            if isinstance(initial_tab, int):
+                initial_index = max(0, min(initial_tab, self.tab_list.count() - 1))
+            self.tab_list.setCurrentRow(initial_index)
+            self.content_stack.setCurrentIndex(initial_index)
+
+        self._connect_change_tracking()
+        self._set_initial_settings_state()
     
     def _create_latency_tab(self):
         """Create latency settings tab"""
@@ -212,19 +309,22 @@ class SettingsWindow(QDialog):
         self.keybind_combo.setStyleSheet(
             "background: #1a1a1a; color: #ddd; border: 1px solid #333; padding: 4px;"
         )
-        self.keybind_combo.addItem("Arrow Keys (Recommended)")
-        self.keybind_combo.addItem("WASD Keys")
+        self.keybind_combo.addItem("Arrow Keys (Recommended)", "arrows")
+        self.keybind_combo.addItem("WASD Keys", "wasd")
+        self.keybind_combo.addItem("ESDF Keys", "esdf")
         
         if self.parent_app:
             keybind_mode = self.parent_app.global_settings.get("keybind_mode", "arrows")
-            self.keybind_combo.setCurrentIndex(1 if keybind_mode == "wasd" else 0)
+            index = self.keybind_combo.findData(keybind_mode)
+            self.keybind_combo.setCurrentIndex(index if index >= 0 else 0)
         
         controls_layout.addWidget(self.keybind_combo)
         
         controls_desc = QLabel(
             "Choose which keys to use for executing stratagems.\n"
             "Arrow Keys (Recommended): Uses ↑↓←→ for stratagem inputs.\n"
-            "WASD: Uses W/A/S/D keys for stratagem inputs."
+            "WASD: Uses W/A/S/D keys for stratagem inputs.\n"
+            "ESDF: Uses E/S/D/F keys for stratagem inputs."
         )
         controls_desc.setObjectName("settings_description")
         controls_desc.setWordWrap(True)
@@ -309,11 +409,23 @@ class SettingsWindow(QDialog):
         theme_label.setStyleSheet("color: #ddd; padding-top: 8px;")
         appear_layout.addWidget(theme_label)
         
-        self.theme_combo = QComboBox()
+        self.theme_combo = DeletableComboBox()
         self.theme_combo.setStyleSheet(
             "background: #1a1a1a; color: #ddd; border: 1px solid #333; padding: 4px;"
         )
-        self.theme_combo.addItems(["Dark (Default)", "Dark with Blue Accent", "Dark with Red Accent"])
+        themes = []
+        if self.parent_app and hasattr(self.parent_app, "get_available_themes"):
+            themes = list(self.parent_app.get_available_themes())
+        else:
+            themes = ["Dark (Default)", "Dark with Blue Accent", "Dark with Red Accent"]
+
+        for theme_name in themes:
+            source_name = self.parent_app.get_theme_source(theme_name) if self.parent_app and hasattr(self.parent_app, "get_theme_source") else None
+            is_custom_user_theme = source_name == "User custom"
+            self.theme_combo.addItem(theme_name, deletable=is_custom_user_theme)
+
+        if self.custom_theme_option not in themes:
+            self.theme_combo.addItem(self.custom_theme_option, deletable=False)
         
         if self.parent_app:
             theme = self.parent_app.global_settings.get("theme", "Dark (Default)")
@@ -322,6 +434,50 @@ class SettingsWindow(QDialog):
                 self.theme_combo.setCurrentIndex(idx)
         
         appear_layout.addWidget(self.theme_combo)
+
+        self.theme_source_label = QLabel("")
+        self.theme_source_label.setObjectName("theme_source_label")
+        self.theme_source_label.setStyleSheet("color: #888; font-size: 10px; padding-top: 2px;")
+        appear_layout.addWidget(self.theme_source_label)
+
+        self.custom_theme_widget = QWidget()
+        custom_theme_layout = QVBoxLayout(self.custom_theme_widget)
+        custom_theme_layout.setContentsMargins(0, 8, 0, 0)
+        custom_theme_layout.setSpacing(6)
+
+        custom_theme_label = QLabel("Custom Theme Colors")
+        custom_theme_label.setStyleSheet("color: #ddd; font-weight: bold;")
+        custom_theme_layout.addWidget(custom_theme_label)
+
+        self.custom_bg_input = QLineEdit("#151a18")
+        self.custom_border_input = QLineEdit("#2f7a5d")
+        self.custom_accent_input = QLineEdit("#4bbf8a")
+
+        for input_field in (self.custom_bg_input, self.custom_border_input, self.custom_accent_input):
+            input_field.setStyleSheet("background: #1a1a1a; color: #ddd; border: 1px solid #333; padding: 4px;")
+
+        custom_theme_layout.addLayout(self._build_color_row("Background", self.custom_bg_input))
+        custom_theme_layout.addLayout(self._build_color_row("Border", self.custom_border_input))
+        custom_theme_layout.addLayout(self._build_color_row("Accent", self.custom_accent_input))
+
+        custom_theme_hint = QLabel("Choose colors and click Save Custom Theme, then select it from the list.")
+        custom_theme_hint.setWordWrap(True)
+        custom_theme_hint.setStyleSheet("color: #999; font-size: 10px;")
+        custom_theme_layout.addWidget(custom_theme_hint)
+
+        self.save_custom_theme_btn = QPushButton("Save Custom Theme")
+        self.save_custom_theme_btn.setObjectName("settings_apply")
+        self.save_custom_theme_btn.clicked.connect(self.save_custom_theme_from_ui)
+        custom_theme_layout.addWidget(self.save_custom_theme_btn)
+
+        self.custom_theme_widget.hide()
+        appear_layout.addWidget(self.custom_theme_widget)
+
+        self.theme_combo.currentTextChanged.connect(self.update_theme_source_label)
+        self.theme_combo.currentTextChanged.connect(self.on_theme_changed)
+        self.theme_combo.deleteRequested.connect(self.delete_theme_from_select)
+        self.update_theme_source_label(self.theme_combo.currentText())
+        self.on_theme_changed(self.theme_combo.currentText())
         
         appear_desc = QLabel("Select the color theme for the application. Changes apply immediately.")
         appear_desc.setObjectName("settings_description")
@@ -331,6 +487,216 @@ class SettingsWindow(QDialog):
         
         appear_layout.addStretch(1)
         self.content_stack.addWidget(appear_widget)
+
+    def update_theme_source_label(self, theme_name):
+        """Show origin below theme name for customization-provided themes."""
+        if not hasattr(self, "theme_source_label"):
+            return
+
+        if theme_name == self.custom_theme_option:
+            self.theme_source_label.setText("Create a new custom theme")
+            return
+
+        source_name = None
+        if self.parent_app and hasattr(self.parent_app, "get_theme_source"):
+            source_name = self.parent_app.get_theme_source(theme_name)
+
+        if source_name:
+            self.theme_source_label.setText(f"From customization pack: {source_name}")
+        else:
+            self.theme_source_label.setText("")
+
+    def on_theme_changed(self, theme_name):
+        """Toggle custom theme color controls based on selected theme option."""
+        if hasattr(self, "custom_theme_widget"):
+            self.custom_theme_widget.setVisible(theme_name == self.custom_theme_option)
+
+    def _connect_change_tracking(self):
+        """Connect settings controls to Apply button dirty-state tracking."""
+        controls = [
+            getattr(self, "slider", None),
+            getattr(self, "spin", None),
+            getattr(self, "keybind_combo", None),
+            getattr(self, "autoload_check", None),
+            getattr(self, "sound_check", None),
+            getattr(self, "visual_check", None),
+            getattr(self, "theme_combo", None),
+            getattr(self, "minimize_tray_check", None),
+            getattr(self, "require_admin_check", None),
+            getattr(self, "auto_update_check", None),
+            getattr(self, "custom_bg_input", None),
+            getattr(self, "custom_border_input", None),
+            getattr(self, "custom_accent_input", None),
+        ]
+
+        for control in controls:
+            if control is None:
+                continue
+            if isinstance(control, (QSlider, QSpinBox)):
+                control.valueChanged.connect(self._mark_settings_changed)
+            elif isinstance(control, QComboBox):
+                control.currentTextChanged.connect(self._mark_settings_changed)
+            elif isinstance(control, QCheckBox):
+                control.toggled.connect(self._mark_settings_changed)
+            elif isinstance(control, QLineEdit):
+                control.textChanged.connect(self._mark_settings_changed)
+
+    def _capture_settings_state(self):
+        """Capture current settings form state for dirty checking."""
+        return {
+            "latency": self.spin.value() if hasattr(self, "spin") else None,
+            "keybind_mode": self.keybind_combo.currentData() if hasattr(self, "keybind_combo") else None,
+            "autoload_profile": self.autoload_check.isChecked() if hasattr(self, "autoload_check") else None,
+            "sound_enabled": self.sound_check.isChecked() if hasattr(self, "sound_check") else None,
+            "visual_enabled": self.visual_check.isChecked() if hasattr(self, "visual_check") else None,
+            "theme": self.theme_combo.currentText() if hasattr(self, "theme_combo") else None,
+            "minimize_to_tray": self.minimize_tray_check.isChecked() if hasattr(self, "minimize_tray_check") else None,
+            "require_admin": self.require_admin_check.isChecked() if hasattr(self, "require_admin_check") else None,
+            "auto_check_updates": self.auto_update_check.isChecked() if hasattr(self, "auto_update_check") else None,
+            "custom_bg": self.custom_bg_input.text().strip() if hasattr(self, "custom_bg_input") else None,
+            "custom_border": self.custom_border_input.text().strip() if hasattr(self, "custom_border_input") else None,
+            "custom_accent": self.custom_accent_input.text().strip() if hasattr(self, "custom_accent_input") else None,
+            "enabled_plugins": sorted(self.get_checked_plugin_manifest_paths()),
+        }
+
+    def _set_initial_settings_state(self):
+        """Store initial state snapshot and refresh Apply button state."""
+        self.initial_settings_state = self._capture_settings_state()
+        self._update_apply_button_state()
+
+    def _mark_settings_changed(self, *_args):
+        """Handle settings field changes and refresh Apply button state."""
+        self._update_apply_button_state()
+
+    def _update_apply_button_state(self):
+        """Enable Apply only when current state differs from initial state."""
+        if not hasattr(self, "apply_btn"):
+            return
+
+        current_state = self._capture_settings_state()
+        self.apply_btn.setEnabled(current_state != self.initial_settings_state)
+
+    def save_custom_theme_from_ui(self):
+        """Save current custom theme colors using a dedicated button."""
+        if self.theme_combo.currentText() != self.custom_theme_option:
+            QMessageBox.information(self, "Custom Theme", "Select 'Custom Theme' first.")
+            return
+
+        custom_name, ok = QInputDialog.getText(
+            self,
+            "Save Custom Theme",
+            "Theme name:"
+        )
+        if not ok:
+            return
+
+        custom_name = custom_name.strip()
+        if not custom_name:
+            QMessageBox.warning(self, "Invalid Name", "Please provide a valid custom theme name.")
+            return
+
+        existing_themes = []
+        if self.parent_app and hasattr(self.parent_app, "get_available_themes"):
+            existing_themes = list(self.parent_app.get_available_themes())
+
+        if custom_name in existing_themes:
+            overwrite = QMessageBox.question(
+                self,
+                "Theme Exists",
+                f"A theme named '{custom_name}' already exists. Overwrite it?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if overwrite != QMessageBox.StandardButton.Yes:
+                return
+
+        custom_colors = {
+            "background_color": self.custom_bg_input.text().strip() or "#151a18",
+            "border_color": self.custom_border_input.text().strip() or "#2f7a5d",
+            "accent_color": self.custom_accent_input.text().strip() or "#4bbf8a",
+        }
+
+        if not hasattr(self.parent_app, "save_custom_theme") or not self.parent_app.save_custom_theme(custom_name, custom_colors):
+            QMessageBox.warning(self, "Theme Save Failed", "Could not save custom theme.")
+            return
+
+        existing_index = self.theme_combo.findText(custom_name)
+        if existing_index < 0:
+            custom_option_index = self.theme_combo.findText(self.custom_theme_option)
+            if custom_option_index >= 0:
+                self.theme_combo.insertItem(custom_option_index, custom_name)
+                self.theme_combo.setItemDeletable(custom_option_index, True)
+            else:
+                self.theme_combo.addItem(custom_name, deletable=True)
+        else:
+            self.theme_combo.setItemDeletable(existing_index, True)
+
+        selected_index = self.theme_combo.findText(custom_name)
+        if selected_index >= 0:
+            self.theme_combo.setCurrentIndex(selected_index)
+
+        QMessageBox.information(self, "Theme Saved", f"Custom theme '{custom_name}' saved.")
+        self._mark_settings_changed()
+
+    def _build_color_row(self, label_text, input_field):
+        """Create one color input row with a picker button."""
+        row = QHBoxLayout()
+        label = QLabel(f"{label_text}:")
+        label.setStyleSheet("color: #ddd;")
+        row.addWidget(label)
+        row.addWidget(input_field, 1)
+
+        pick_button = QPushButton("Pick")
+        pick_button.setObjectName("settings_cancel")
+        pick_button.clicked.connect(lambda _checked=False, field=input_field: self._pick_color(field))
+        row.addWidget(pick_button)
+        return row
+
+    def _pick_color(self, target_field):
+        """Open color picker and write selected color hex into target field."""
+        initial_value = target_field.text().strip() if target_field else ""
+        color = QColorDialog.getColor(parent=self)
+        if color.isValid():
+            target_field.setText(color.name())
+
+    def delete_theme_from_select(self, theme_name, _index=None, _user_data=None):
+        """Delete custom theme from theme selector after confirmation."""
+        if not isinstance(theme_name, str) or not theme_name.strip():
+            return
+        if theme_name == self.custom_theme_option:
+            return
+
+        source_name = self.parent_app.get_theme_source(theme_name) if self.parent_app and hasattr(self.parent_app, "get_theme_source") else None
+        if source_name != "User custom":
+            QMessageBox.information(self, "Theme Delete", "Only user custom themes can be deleted here.")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Delete Theme",
+            f"Delete custom theme '{theme_name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        if not self.parent_app or not hasattr(self.parent_app, "delete_custom_theme"):
+            QMessageBox.warning(self, "Theme Delete", "Theme delete is not available.")
+            return
+
+        if not self.parent_app.delete_custom_theme(theme_name):
+            QMessageBox.warning(self, "Theme Delete", "Could not delete theme.")
+            return
+
+        idx = self.theme_combo.findText(theme_name)
+        if idx >= 0:
+            self.theme_combo.removeItem(idx)
+
+        fallback_idx = self.theme_combo.findText("Dark (Default)")
+        if fallback_idx >= 0:
+            self.theme_combo.setCurrentIndex(fallback_idx)
+        self._mark_settings_changed()
     
     def _create_windows_tab(self):
         """Create windows settings tab"""
@@ -412,6 +778,213 @@ class SettingsWindow(QDialog):
         
         windows_layout.addStretch(1)
         self.content_stack.addWidget(windows_widget)
+
+    def _create_plugins_tab(self):
+        """Create customizations settings tab with list and create action."""
+        plugins_widget = QWidget()
+        plugins_layout = QHBoxLayout(plugins_widget)
+        plugins_layout.setContentsMargins(12, 12, 12, 12)
+        plugins_layout.setSpacing(12)
+
+        left_panel = QVBoxLayout()
+
+        create_btn = QPushButton("Create Customization Pack")
+        create_btn.setObjectName("settings_apply")
+        create_btn.clicked.connect(self.create_plugin_template)
+        left_panel.addWidget(create_btn)
+
+        self.plugins_list = QListWidget()
+        self.plugins_list.setObjectName("plugins_list")
+        self.plugins_list.setMinimumWidth(260)
+        left_panel.addWidget(self.plugins_list, 1)
+
+        refresh_btn = QPushButton("Refresh")
+        refresh_btn.setObjectName("settings_cancel")
+        refresh_btn.clicked.connect(self.refresh_plugin_list)
+        left_panel.addWidget(refresh_btn)
+
+        info_label = QLabel(
+            "Installed/created customization packs are listed above.\n"
+            "Use Create Customization Pack to generate a JSON template file."
+        )
+        info_label.setWordWrap(True)
+        info_label.setStyleSheet("color: #aaa; font-size: 12px;")
+        left_panel.addWidget(info_label)
+
+        left_panel.addStretch(1)
+
+        plugins_layout.addLayout(left_panel, 1)
+
+        self.content_stack.addWidget(plugins_widget)
+        self.refresh_plugin_list()
+
+    def refresh_plugin_list(self):
+        """Refresh list of discovered plugins."""
+        if not hasattr(self, "plugins_list"):
+            return
+
+        previously_checked = set(getattr(self, "selected_plugin_manifest_paths", []))
+        self.selected_plugin_manifest_paths = []
+        self.plugins_list.clear()
+        plugins = PluginManager.list_plugins()
+        if not plugins:
+            self.plugins_list.addItem("No customization packs found")
+            return
+
+        checked_paths = []
+        for plugin in plugins:
+            name = plugin.get("name", "Unknown")
+            plugin_id = plugin.get("id", "unknown")
+            is_enabled = bool(plugin.get("enabled", True))
+            manifest_path = plugin.get("manifest_path", "")
+
+            display_text = f"{name} ({plugin_id})"
+            item = QListWidgetItem()
+            item.setData(Qt.ItemDataRole.UserRole, manifest_path)
+
+            should_check = manifest_path in previously_checked or (not previously_checked and is_enabled)
+            self.plugins_list.addItem(item)
+
+            row_widget = PluginListItemWidget(
+                display_text=display_text,
+                manifest_path=manifest_path,
+                checked=should_check,
+                on_delete_callback=self.delete_plugin_by_manifest,
+                parent=self.plugins_list,
+            )
+            row_widget.checkbox.toggled.connect(self._mark_settings_changed)
+            item.setSizeHint(row_widget.sizeHint())
+            self.plugins_list.setItemWidget(item, row_widget)
+
+            if should_check and manifest_path:
+                checked_paths.append(manifest_path)
+
+        self.selected_plugin_manifest_paths = checked_paths
+
+    def get_checked_plugin_manifest_paths(self):
+        """Collect checked plugin manifests from plugin list."""
+        checked_paths = []
+        if not hasattr(self, "plugins_list"):
+            return checked_paths
+
+        for index in range(self.plugins_list.count()):
+            item = self.plugins_list.item(index)
+            manifest_path = item.data(Qt.ItemDataRole.UserRole)
+            if not manifest_path:
+                continue
+
+            row_widget = self.plugins_list.itemWidget(item)
+            if isinstance(row_widget, PluginListItemWidget) and row_widget.checkbox.isChecked():
+                checked_paths.append(manifest_path)
+
+        self.selected_plugin_manifest_paths = checked_paths
+        return checked_paths
+
+    def _sanitize_plugin_filename(self, value):
+        """Create safe filename stem from user input."""
+        if not isinstance(value, str):
+            return ""
+
+        sanitized = "".join(ch for ch in value.strip() if ch.isalnum() or ch in ("-", "_", " "))
+        return sanitized.replace(" ", "_")
+
+    def create_plugin_template(self):
+        """Prompt for customization template name and create JSON template file."""
+        template_name, ok = QInputDialog.getText(self, "Create Customization Pack", "Template name:")
+        if not ok:
+            return
+
+        file_stem = self._sanitize_plugin_filename(template_name)
+        if not file_stem:
+            QMessageBox.warning(self, "Invalid Name", "Please enter a valid customization name.")
+            return
+
+        plugin_roots = PluginManager.get_plugin_roots()
+        target_dir = plugin_roots[0] if plugin_roots else os.path.abspath("plugins")
+        os.makedirs(target_dir, exist_ok=True)
+
+        target_file = os.path.join(target_dir, f"{file_stem}.json")
+        if os.path.exists(target_file):
+            overwrite = QMessageBox.question(
+                self,
+                "File Exists",
+                f"{os.path.basename(target_file)} already exists. Overwrite?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if overwrite != QMessageBox.StandardButton.Yes:
+                return
+
+        template = {
+            "id": file_stem.lower(),
+            "name": template_name.strip() or file_stem,
+            "enabled": True,
+            "stratagems_by_department": {
+                "Custom Stratagems": {
+                    "My Stratagem": ["down", "left", "up", "right"]
+                }
+            },
+            "icon_overrides": {
+                "My Stratagem": "icons/my_stratagem.svg"
+            },
+            "themes": [
+                {
+                    "name": "My Custom Theme",
+                    "colors": {
+                        "background_color": "#151a18",
+                        "border_color": "#2f7a5d",
+                        "accent_color": "#4bbf8a"
+                    }
+                }
+            ]
+        }
+
+        try:
+            with open(target_file, "w", encoding="utf-8") as f:
+                json.dump(template, f, indent=2)
+        except Exception as e:
+            QMessageBox.warning(self, "Create Failed", f"Could not create plugin template:\n{e}")
+            return
+
+        self.refresh_plugin_list()
+
+        open_dir_reply = QMessageBox.question(
+            self,
+            "Open Directory",
+            "Customization template created. Open customization folder directory now?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+
+        if open_dir_reply == QMessageBox.StandardButton.Yes:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(target_dir))
+
+        guide = PluginGuideDialog(self)
+        guide.exec()
+
+    def delete_plugin_by_manifest(self, manifest_path, plugin_name):
+        """Delete a customization pack by manifest path with confirmation."""
+        if not manifest_path:
+            QMessageBox.information(self, "Delete Customization", "Select a valid customization entry to delete.")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Confirm Delete",
+            f"Remove customization pack '{plugin_name}'?\nThis will remove its files.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        success, message = PluginManager.uninstall_plugin_by_manifest(manifest_path)
+        if not success:
+            QMessageBox.warning(self, "Delete Failed", message)
+            return
+
+        self.refresh_plugin_list()
+        QMessageBox.information(self, "Customization Removed", message)
     
     def _create_bottom_buttons(self, main_layout):
         """Create bottom buttons layout"""
@@ -431,6 +1004,7 @@ class SettingsWindow(QDialog):
         btn_row.addStretch(1)
         
         apply_btn = QPushButton("Apply")
+        self.apply_btn = apply_btn
         apply_btn.setObjectName("settings_apply")
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setObjectName("settings_cancel")
@@ -485,12 +1059,21 @@ class SettingsWindow(QDialog):
         # Save all settings
         latency_value = self.spin.value()
         old_theme = self.parent_app.global_settings.get("theme", "Dark (Default)")
-        new_theme = self.theme_combo.currentText()
+        selected_theme = self.theme_combo.currentText()
+        new_theme = selected_theme
         old_require_admin = self.parent_app.global_settings.get("require_admin", False)
         new_require_admin = self.require_admin_check.isChecked()
+
+        if selected_theme == self.custom_theme_option:
+            QMessageBox.information(
+                self,
+                "Save Custom Theme",
+                "Use 'Save Custom Theme' to create a named theme, then select it before applying settings."
+            )
+            return
         
         self.parent_app.speed_slider.setValue(latency_value)
-        keybind_mode = "arrows" if self.keybind_combo.currentIndex() == 0 else "wasd"
+        keybind_mode = self.keybind_combo.currentData() or "arrows"
         
         self.parent_app.global_settings["latency"] = latency_value
         self.parent_app.global_settings["keybind_mode"] = keybind_mode
@@ -511,6 +1094,10 @@ class SettingsWindow(QDialog):
         # Handle admin privilege change
         if old_require_admin != new_require_admin:
             self._handle_admin_privilege_change(new_require_admin)
+
+        checked_manifest_paths = self.get_checked_plugin_manifest_paths()
+        if hasattr(self.parent_app, "apply_plugin_manifest_selection"):
+            self.parent_app.apply_plugin_manifest_selection(checked_manifest_paths)
         
         self.accept()
     

@@ -25,7 +25,7 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller --noconfirm --onefile --windowed --name "HelldiversNumpadMacros" --add-data "assets;assets" --add-data "src/core/stratagem_data.py;." --add-data "src/config/version.py;." --add-data "src/managers/update_checker.py;." --add-data "src/ui/theme_dark_default.qss;src/ui/" --add-data "src/ui/theme_dark_blue.qss;src/ui/" --add-data "src/ui/theme_dark_red.qss;src/ui/" --icon "assets/icon.ico" --manifest "app.manifest" main.py
+          pyinstaller --noconfirm --onefile --windowed --name "Helldivers2StratCommander" --add-data "assets;assets" --add-data "src/core/stratagem_data.py;." --add-data "src/config/version.py;." --add-data "src/managers/update_checker.py;." --add-data "src/ui/theme_dark_default.qss;src/ui/" --add-data "src/ui/theme_dark_blue.qss;src/ui/" --add-data "src/ui/theme_dark_red.qss;src/ui/" --icon "assets/icon.ico" --manifest "app.manifest" main.py
 
       - name: Install Inno Setup
         run: |
@@ -44,15 +44,15 @@ jobs:
       - name: Rename portable executable
         run: |
           $version = "${{ steps.get_version.outputs.VERSION }}"
-          Copy-Item "dist\HelldiversNumpadMacros.exe" "dist\HelldiversNumpadMacros-Portable-v$version.exe"
+          Copy-Item "dist\Helldivers2StratCommander.exe" "dist\Helldivers2StratCommander-Portable-v$version.exe"
         shell: powershell
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            dist/installer/HelldiversNumpadMacros-Setup-v*.exe
-            dist/HelldiversNumpadMacros-Portable-v*.exe
+            dist/installer/Helldivers2StratCommander-Setup-v*.exe
+            dist/Helldivers2StratCommander-Portable-v*.exe
           draft: false
           prerelease: false
           generate_release_notes: true

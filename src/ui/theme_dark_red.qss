@@ -22,10 +22,24 @@ QComboBox#profile_box { background: #111; border: 1px solid #444; padding: 5px; 
 QComboBox#profile_box_styled { background: #1a1a1a; border: 1px solid #333; border-radius: 4px; color: #ff4444; font-weight: bold; padding: 2px 8px; min-width: 178px; min-height: 26px; max-width: 178px; max-height: 26px; margin: 0px; }
 QComboBox#profile_box_styled:hover { background: #252525; border: 1px solid #ff4444; }
 QComboBox#profile_box_styled::drop-down { subcontrol-origin: border; subcontrol-position: center right; width: 22px; height: 26px; }
+QComboBox#profile_box_styled::down-arrow { image: url(assets/profile_dropdown_arrow.svg); width: 10px; height: 10px; }
 
 /* Menu button */
 QPushButton#menu_button { background: #1a1a1a; border: 1px solid #333; border-radius: 4px; color: #ff4444; font-weight: bold; padding: 4px 8px; margin: 0px; }
 QPushButton#menu_button:hover { background: #252525; border: 1px solid #ff4444; }
+
+/* Left nav bar */
+QWidget#left_nav_bar { background: #0b0b0b; border-right: 1px solid #222; }
+QPushButton#nav_toggle_btn, QPushButton#nav_icon_btn, QPushButton#nav_settings_btn {
+	background: #1a1a1a; border: 1px solid #333; border-radius: 6px; color: #ff4444;
+	min-width: 30px; min-height: 30px; font-size: 12pt; text-align: left; padding-left: 8px;
+}
+QPushButton#nav_toggle_btn:hover, QPushButton#nav_icon_btn:hover, QPushButton#nav_settings_btn:hover {
+	background: #252525; border: 1px solid #ff4444;
+}
+QPushButton#nav_toggle_btn[collapsed="true"], QPushButton#nav_icon_btn[collapsed="true"], QPushButton#nav_settings_btn[collapsed="true"] {
+	text-align: center; padding-left: 0px;
+}
 
 /* Top and bottom bars */
 QWidget#top_bar, QWidget#bottom_bar { background: #0b0b0b; border: 1px solid #222; }
@@ -37,7 +51,8 @@ QPushButton#speed_btn { font-size: 8pt; color: #888; background: transparent; bo
 QPushButton#speed_btn:hover { color: #ff4444; }
 
 /* Macro toggle */
-QCheckBox#macros_toggle { spacing: 8px; color: #ff4444; }
+/* DO NOT OVERRIDE: spacing must be 0px to avoid label gap */
+QCheckBox#macros_toggle { spacing: 0px; color: #ff4444; }
 QCheckBox#macros_toggle::indicator { width: 56px; height: 28px; }
 QCheckBox#macros_toggle::indicator:checked { image: url(assets/toggle_on.svg); }
 QCheckBox#macros_toggle::indicator:unchecked { image: url(assets/toggle_off.svg); }
@@ -67,6 +82,7 @@ QLabel#settings_sub_label { color: #ddd; padding-top: 8px; }
 QCheckBox[role="settings_check"] { color: #ddd; padding: 8px; }
 QComboBox#settings_theme_combo { background: #1a1a1a; color: #ddd; border: 1px solid #333; padding: 4px; }
 QPushButton#settings_apply { background: #222; color: #ff4444; border: 1px solid #444; padding: 6px 12px; }
+QPushButton#settings_apply:disabled { background: #141414; color: #666; border: 1px solid #2a2a2a; }
 QPushButton#settings_cancel { background: #222; color: #ddd; border: 1px solid #444; padding: 6px 12px; }
 
 /* Settings Window */

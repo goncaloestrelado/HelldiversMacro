@@ -1,11 +1,11 @@
-; Inno Setup Script for Helldivers Numpad Macros
+; Inno Setup Script for Helldivers 2 - Strat Commander
 ; https://jrsoftware.org/isinfo.php
 
-#define MyAppName "Helldivers Numpad Macros"
-#define MyAppVersion "0.2.0"
+#define MyAppName "Helldivers 2 - Strat Commander"
+#define MyAppVersion "beta0.3.0"
 #define MyAppPublisher "Goncalo Estrelado"
 #define MyAppURL "https://github.com/goncaloestrelado/HelldiversMacro"
-#define MyAppExeName "HelldiversNumpadMacros.exe"
+#define MyAppExeName "Helldivers2StratCommander.exe"
 #define MyAppIconFile "..\assets\icon.ico"
 
 [Setup]
@@ -22,7 +22,7 @@ DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 LicenseFile=
 OutputDir=..\dist
-OutputBaseFilename=HelldiversNumpadMacros-Setup-{#MyAppVersion}
+OutputBaseFilename=Helldivers2StratCommander-Setup-{#MyAppVersion}
 ;SetupIconFile={#MyAppIconFile}
 Compression=lzma
 SolidCompression=yes
@@ -68,7 +68,7 @@ var
   ResultCode: Integer;
 begin
   // Use taskkill to force-terminate the application
-  ShellExec('open', 'taskkill.exe', '/F /IM HelldiversNumpadMacros.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  ShellExec('open', 'taskkill.exe', '/F /IM Helldivers2StratCommander.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
 // Check if app is running and close it before installation
@@ -80,11 +80,11 @@ begin
   RetryCount := 0;
   
   // Check if the app is running and kill it
-  while (FindWindowByWindowName('Helldivers 2 - Numpad Commander') <> 0) and (RetryCount < 3) do
+  while (FindWindowByWindowName('Helldivers 2 - Strat Commander') <> 0) and (RetryCount < 3) do
   begin
     if RetryCount = 0 then
     begin
-      MsgBox('Helldivers Numpad Macros is currently running.' + #13#10 + #13#10 + 
+      MsgBox('Helldivers 2 - Strat Commander is currently running.' + #13#10 + #13#10 + 
              'Setup will automatically close it to continue installation.', 
              mbInformation, MB_OK);
     end;
