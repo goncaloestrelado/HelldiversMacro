@@ -86,7 +86,7 @@ def get_install_type():
 
 def get_installer_filename(tag_name):
     """Generate expected installer filename from tag"""
-    return f"HelldiversNumpadMacros-Setup-{tag_name}.exe"
+    return f"Helldivers2StratCommander-Setup-{tag_name}.exe"
 
 
 def is_admin():

@@ -395,7 +395,7 @@ class PortableUpdateDialog(QDialog):
         # Generate filename for new version
         filename = os.path.basename(download_url.split('?')[0])  # Remove query params
         if not filename.endswith('.exe'):
-            filename = f"HelldiversNumpadMacros_{self.update_info.get('tag_name', 'new')}.exe"
+            filename = f"Helldivers2StratCommander_{self.update_info.get('tag_name', 'new')}.exe"
         
         # Add suffix to avoid overwriting current exe during download
         self.new_filename = filename.replace('.exe', '_new.exe')

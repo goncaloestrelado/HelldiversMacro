@@ -6,11 +6,11 @@ powershell -NoProfile -Command "cmd /c \"\"%~f0\" _run\" 2>&1 | Tee-Object -File
 exit /b %errorlevel%
 
 :main
-REM Build script for Helldivers Numpad Macros
+REM Build script for Helldivers 2 - Strat Commander
 REM This script builds the EXE with PyInstaller and creates an installer with Inno Setup
 
 echo ============================================
-echo Helldivers Numpad Macros - Build Script
+echo Helldivers 2 - Strat Commander - Build Script
 echo ============================================
 echo.
 
@@ -48,13 +48,14 @@ echo [Step 1/4] Cleaning previous build...
 if exist "build" rmdir /s /q "build"
 if exist "dist" rmdir /s /q "dist"
 if exist "HelldiversNumpadMacros.spec" del "HelldiversNumpadMacros.spec"
+if exist "Helldivers2StratCommander.spec" del "Helldivers2StratCommander.spec"
 
 echo.
 echo [Step 2/4] Building EXE with PyInstaller...
 echo This may take a few minutes...
 
 pyinstaller --noconfirm --onefile --windowed ^
-    --name "HelldiversNumpadMacros" ^
+    --name "Helldivers2StratCommander" ^
     --add-data "assets;assets" ^
     --add-data "src/core/stratagem_data.py;." ^
     --add-data "src/config/version.py;." ^
@@ -74,7 +75,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo [Success] EXE created: dist\HelldiversNumpadMacros.exe
+echo [Success] EXE created: dist\Helldivers2StratCommander.exe
 
 REM Read version from version.py as single source of truth
 for /f "tokens=2 delims== " %%A in ('findstr /r /c:"^VERSION[ ]*=" src\config\version.py') do set "APP_VERSION=%%~A"
@@ -103,7 +104,7 @@ if "%INNO_PATH%"=="" (
     echo To create an installer, install Inno Setup from: https://jrsoftware.org/isdl.php
     echo Then run this build script again, or manually compile: installer\installer.iss
     echo.
-    echo Portable EXE created successfully: dist\HelldiversNumpadMacros.exe
+    echo Portable EXE created successfully: dist\Helldivers2StratCommander.exe
     echo Skipping installer creation...
     goto build_complete
 )
@@ -113,7 +114,7 @@ echo Attempting to compile installer with Inno Setup...
 cd /d "C:\Users\Utilizador\Desktop\HelldiversMacrosProject\HelldiversMacro"
 "%INNO_PATH%" "installer\installer.iss"
 
-set "INSTALLER_EXE=dist\HelldiversNumpadMacros-Setup-%APP_VERSION%.exe"
+set "INSTALLER_EXE=dist\Helldivers2StratCommander-Setup-%APP_VERSION%.exe"
 if exist "%INSTALLER_EXE%" (
     echo Installer created successfully
     goto rename_portable
@@ -124,10 +125,10 @@ if exist "%INSTALLER_EXE%" (
 
 :rename_portable
 REM Rename portable EXE to include version (do this whether or not installer succeeded)
-set "PORTABLE_EXE_OLD=dist\HelldiversNumpadMacros.exe"
-set "PORTABLE_EXE_NEW=dist\HelldiversNumpadMacros-Portable-%APP_VERSION%.exe"
+set "PORTABLE_EXE_OLD=dist\Helldivers2StratCommander.exe"
+set "PORTABLE_EXE_NEW=dist\Helldivers2StratCommander-Portable-%APP_VERSION%.exe"
 if exist "%PORTABLE_EXE_OLD%" (
-    ren "%PORTABLE_EXE_OLD%" "HelldiversNumpadMacros-Portable-%APP_VERSION%.exe"
+    ren "%PORTABLE_EXE_OLD%" "Helldivers2StratCommander-Portable-%APP_VERSION%.exe"
     echo Renamed portable EXE: %PORTABLE_EXE_NEW%
 ) else (
     if not exist "%PORTABLE_EXE_NEW%" (
@@ -143,14 +144,14 @@ echo ============================================
 echo Build Complete!
 echo ============================================
 echo.
-if exist "dist\HelldiversNumpadMacros-Portable-%APP_VERSION%.exe" (
-    echo Portable EXE: dist\HelldiversNumpadMacros-Portable-%APP_VERSION%.exe
+if exist "dist\Helldivers2StratCommander-Portable-%APP_VERSION%.exe" (
+    echo Portable EXE: dist\Helldivers2StratCommander-Portable-%APP_VERSION%.exe
 )
-if exist "dist\HelldiversNumpadMacros.exe" (
-    echo Portable EXE: dist\HelldiversNumpadMacros.exe
+if exist "dist\Helldivers2StratCommander.exe" (
+    echo Portable EXE: dist\Helldivers2StratCommander.exe
 )
-if exist "dist\HelldiversNumpadMacros-Setup-%APP_VERSION%.exe" (
-    echo Installer EXE: dist\HelldiversNumpadMacros-Setup-%APP_VERSION%.exe
+if exist "dist\Helldivers2StratCommander-Setup-%APP_VERSION%.exe" (
+    echo Installer EXE: dist\Helldivers2StratCommander-Setup-%APP_VERSION%.exe
 )
 echo.
 echo.

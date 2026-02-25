@@ -38,10 +38,10 @@ VSVersionInfo(
         [StringStruct(u'CompanyName', u'HelldiversMacro'),
         StringStruct(u'FileDescription', u'Helldivers 2 Stratagem Macro Tool'),
         StringStruct(u'FileVersion', u'{version_string}'),
-        StringStruct(u'InternalName', u'HelldiversNumpadMacros'),
+        StringStruct(u'InternalName', u'Helldivers2StratCommander'),
         StringStruct(u'LegalCopyright', u''),
-        StringStruct(u'OriginalFilename', u'HelldiversNumpadMacros.exe'),
-        StringStruct(u'ProductName', u'Helldivers Numpad Macros'),
+        StringStruct(u'OriginalFilename', u'Helldivers2StratCommander.exe'),
+        StringStruct(u'ProductName', u'Helldivers 2 - Strat Commander'),
         StringStruct(u'ProductVersion', u'{version_string}')])
       ]),
     VarFileInfo([VarStruct(u'Translation', [1033, 1200])])

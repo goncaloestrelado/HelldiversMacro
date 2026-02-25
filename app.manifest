@@ -3,7 +3,7 @@
   <assemblyIdentity
     version="0.3.0.0"
     processorArchitecture="amd64"
-    name="HelldiversNumpadMacros"
+    name="Helldivers2StratCommander"
     type="win32"
   />
   <description>Helldivers 2 Stratagem Macro Tool</description>
