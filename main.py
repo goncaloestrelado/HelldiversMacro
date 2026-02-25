@@ -15,7 +15,7 @@ from PyQt6.QtSvg import QSvgRenderer
 
 from src.config import (PROFILES_DIR, ASSETS_DIR, get_theme_stylesheet, load_settings, 
                        save_settings, get_asset_path, set_icon_overrides)
-from src.config.constants import NUMPAD_LAYOUT, THEME_FILES
+from src.config.constants import NUMPAD_LAYOUT, THEME_FILES, KEYBIND_MAPPINGS
 from src.core.stratagem_data import STRATAGEMS_BY_DEPARTMENT as BASE_STRATAGEMS_BY_DEPARTMENT
 from src.config.version import VERSION, APP_NAME
 from src.ui.dialogs import TestEnvironment, SettingsWindow
@@ -45,7 +45,7 @@ class SequenceRecorderDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        instruction_label = QLabel("Press Arrow Keys or WASD to record input")
+        instruction_label = QLabel("Press Arrow Keys or your selected key mode (WASD/ESDF) to record input")
         instruction_label.setStyleSheet("color: #aaa; font-size: 11px;")
         layout.addWidget(instruction_label)
 
@@ -127,17 +127,32 @@ class SequenceRecorderDialog(QDialog):
         self.sequence_label.setText(f"Input: {symbols}\n({words})")
 
     def keyPressEvent(self, event):
-        """Capture arrow and WASD keys as sequence input."""
+        """Capture arrow keys and active configured key mode as sequence input."""
         key_map = {
             Qt.Key.Key_Up: "up",
             Qt.Key.Key_Down: "down",
             Qt.Key.Key_Left: "left",
             Qt.Key.Key_Right: "right",
-            Qt.Key.Key_W: "up",
-            Qt.Key.Key_S: "down",
-            Qt.Key.Key_A: "left",
-            Qt.Key.Key_D: "right",
         }
+
+        active_mode = "arrows"
+        if self.parent() and hasattr(self.parent(), "global_settings"):
+            active_mode = self.parent().global_settings.get("keybind_mode", "arrows")
+
+        if active_mode == "wasd":
+            key_map.update({
+                Qt.Key.Key_W: "up",
+                Qt.Key.Key_S: "down",
+                Qt.Key.Key_A: "left",
+                Qt.Key.Key_D: "right",
+            })
+        elif active_mode == "esdf":
+            key_map.update({
+                Qt.Key.Key_E: "up",
+                Qt.Key.Key_D: "down",
+                Qt.Key.Key_S: "left",
+                Qt.Key.Key_F: "right",
+            })
 
         mapped = key_map.get(event.key())
         if mapped:
@@ -1941,12 +1956,9 @@ class StratagemApp(QMainWindow):
     def map_direction_to_key(self, direction):
         """Map stratagem direction to actual key based on user setting"""
         keybind_mode = self.global_settings.get("keybind_mode", "arrows")
-        
-        if keybind_mode == "wasd":
-            mapping = {"up": "w", "down": "s", "left": "a", "right": "d"}
-        else:
-            mapping = {"up": "up", "down": "down", "left": "left", "right": "right"}
-        
+
+        mapping = KEYBIND_MAPPINGS.get(keybind_mode, KEYBIND_MAPPINGS["arrows"])
+
         return mapping.get(direction, direction)
     
     def on_macro_triggered(self, scan_code):

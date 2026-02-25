@@ -63,6 +63,12 @@ KEYBIND_MAPPINGS = {
         "down": "s",
         "left": "a",
         "right": "d"
+    },
+    "esdf": {
+        "up": "e",
+        "down": "d",
+        "left": "s",
+        "right": "f"
     }
 }
 

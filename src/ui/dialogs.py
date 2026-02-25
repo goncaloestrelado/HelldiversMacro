@@ -303,19 +303,22 @@ class SettingsWindow(QDialog):
         self.keybind_combo.setStyleSheet(
             "background: #1a1a1a; color: #ddd; border: 1px solid #333; padding: 4px;"
         )
-        self.keybind_combo.addItem("Arrow Keys (Recommended)")
-        self.keybind_combo.addItem("WASD Keys")
+        self.keybind_combo.addItem("Arrow Keys (Recommended)", "arrows")
+        self.keybind_combo.addItem("WASD Keys", "wasd")
+        self.keybind_combo.addItem("ESDF Keys", "esdf")
         
         if self.parent_app:
             keybind_mode = self.parent_app.global_settings.get("keybind_mode", "arrows")
-            self.keybind_combo.setCurrentIndex(1 if keybind_mode == "wasd" else 0)
+            index = self.keybind_combo.findData(keybind_mode)
+            self.keybind_combo.setCurrentIndex(index if index >= 0 else 0)
         
         controls_layout.addWidget(self.keybind_combo)
         
         controls_desc = QLabel(
             "Choose which keys to use for executing stratagems.\n"
             "Arrow Keys (Recommended): Uses ↑↓←→ for stratagem inputs.\n"
-            "WASD: Uses W/A/S/D keys for stratagem inputs."
+            "WASD: Uses W/A/S/D keys for stratagem inputs.\n"
+            "ESDF: Uses E/S/D/F keys for stratagem inputs."
         )
         controls_desc.setObjectName("settings_description")
         controls_desc.setWordWrap(True)
@@ -811,7 +814,7 @@ class SettingsWindow(QDialog):
         new_require_admin = self.require_admin_check.isChecked()
         
         self.parent_app.speed_slider.setValue(latency_value)
-        keybind_mode = "arrows" if self.keybind_combo.currentIndex() == 0 else "wasd"
+        keybind_mode = self.keybind_combo.currentData() or "arrows"
         
         self.parent_app.global_settings["latency"] = latency_value
         self.parent_app.global_settings["keybind_mode"] = keybind_mode
