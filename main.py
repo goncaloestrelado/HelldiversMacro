@@ -483,6 +483,10 @@ class StratagemApp(QMainWindow):
         self.main_resize_timer.setInterval(20)
         self.main_resize_timer.timeout.connect(self._auto_adjust_window_for_main_slots)
 
+        self.nav_collapsed_width = 46
+        self.nav_expanded_width = 160
+        self.nav_last_auto_resize_delta = 0
+
         self.plugin_creator_dirty = False
         self._macro_state_before_plugins = None
         self._macro_forced_by_plugins = False
@@ -945,13 +949,65 @@ class StratagemApp(QMainWindow):
             btn.update()
 
         if self.nav_expanded:
-            self.nav_widget.setFixedWidth(160)
+            self.nav_widget.setFixedWidth(self.nav_expanded_width)
             if hasattr(self, "nav_layout"):
                 self.nav_layout.setContentsMargins(8, 8, 8, 8)
         else:
-            self.nav_widget.setFixedWidth(46)
+            self.nav_widget.setFixedWidth(self.nav_collapsed_width)
             if hasattr(self, "nav_layout"):
                 self.nav_layout.setContentsMargins(8, 8, 8, 8)
+
+    def _window_content_fits_current_width(self):
+        """Return True when current layout can fit without increasing window width."""
+        central = self.centralWidget()
+        if central and central.layout():
+            central.layout().activate()
+
+        required_width = max(
+            self.minimumWidth(),
+            self.minimumSizeHint().width(),
+            central.minimumSizeHint().width() if central else 0,
+        )
+        return self.width() >= required_width
+
+    def _resize_window_width_by(self, delta_width):
+        """Resize window width by delta and return the applied width delta."""
+        if delta_width == 0:
+            return 0
+
+        current_width = self.width()
+        target_width = current_width + int(delta_width)
+        min_width = max(self.minimumWidth(), self.minimumSizeHint().width())
+        target_width = max(min_width, target_width)
+
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen:
+            target_width = min(target_width, screen.availableGeometry().width())
+
+        applied_delta = int(target_width - current_width)
+        if applied_delta != 0:
+            self.resize(int(target_width), self.height())
+        return applied_delta
+
+    def _auto_adjust_window_for_left_nav(self, expanded_now):
+        """Auto-resize window for nav expand/collapse while preserving reversible delta."""
+        nav_delta = max(0, self.nav_expanded_width - self.nav_collapsed_width)
+        if nav_delta <= 0:
+            self.nav_last_auto_resize_delta = 0
+            return
+
+        if expanded_now:
+            if self._window_content_fits_current_width():
+                self.nav_last_auto_resize_delta = 0
+                return
+
+            applied = self._resize_window_width_by(nav_delta)
+            self.nav_last_auto_resize_delta = max(0, applied)
+            return
+
+        if self.nav_last_auto_resize_delta > 0:
+            self._resize_window_width_by(-self.nav_last_auto_resize_delta)
+        self.nav_last_auto_resize_delta = 0
 
     def _update_left_nav_labels(self):
         """Update nav button labels based on expanded/collapsed state."""
@@ -971,6 +1027,7 @@ class StratagemApp(QMainWindow):
         self.nav_expanded = not self.nav_expanded
         self._apply_left_nav_layout_state()
         self._update_left_nav_labels()
+        QTimer.singleShot(0, lambda expanded=self.nav_expanded: self._auto_adjust_window_for_left_nav(expanded))
         QTimer.singleShot(0, self.update_header_widths)
 
     def show_main_section(self):
