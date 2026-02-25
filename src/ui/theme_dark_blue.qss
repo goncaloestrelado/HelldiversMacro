@@ -37,6 +37,9 @@ QPushButton#nav_toggle_btn, QPushButton#nav_icon_btn, QPushButton#nav_settings_b
 QPushButton#nav_toggle_btn:hover, QPushButton#nav_icon_btn:hover, QPushButton#nav_settings_btn:hover {
 	background: #252525; border: 1px solid #00ccff;
 }
+QPushButton#nav_toggle_btn[collapsed="true"], QPushButton#nav_icon_btn[collapsed="true"], QPushButton#nav_settings_btn[collapsed="true"] {
+	text-align: center; padding-left: 0px;
+}
 
 /* Top and bottom bars */
 QWidget#top_bar, QWidget#bottom_bar { background: #0b0b0b; border: 1px solid #222; }
@@ -79,6 +82,7 @@ QLabel#settings_sub_label { color: #ddd; padding-top: 8px; }
 QCheckBox[role="settings_check"] { color: #ddd; padding: 8px; }
 QComboBox#settings_theme_combo { background: #1a1a1a; color: #ddd; border: 1px solid #333; padding: 4px; }
 QPushButton#settings_apply { background: #222; color: #00ccff; border: 1px solid #444; padding: 6px 12px; }
+QPushButton#settings_apply:disabled { background: #141414; color: #666; border: 1px solid #2a2a2a; }
 QPushButton#settings_cancel { background: #222; color: #ddd; border: 1px solid #444; padding: 6px 12px; }
 
 /* Settings Window */

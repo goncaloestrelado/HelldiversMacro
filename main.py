@@ -19,7 +19,7 @@ from src.config.constants import NUMPAD_LAYOUT, THEME_FILES, KEYBIND_MAPPINGS
 from src.core.stratagem_data import STRATAGEMS_BY_DEPARTMENT as BASE_STRATAGEMS_BY_DEPARTMENT
 from src.config.version import VERSION, APP_NAME
 from src.ui.dialogs import TestEnvironment, SettingsWindow
-from src.ui.widgets import DraggableIcon, NumpadSlot, comm, CollapsibleDepartmentHeader
+from src.ui.widgets import DraggableIcon, NumpadSlot, comm, CollapsibleDepartmentHeader, DeletableComboBox
 from src.managers.profile_manager import ProfileManager
 from src.managers.plugin_manager import PluginManager
 from src.core.macro_engine import MacroEngine
@@ -430,7 +430,87 @@ class StratagemApp(QMainWindow):
         self.theme_files = runtime_data["theme_files"]
         self.theme_sources = runtime_data.get("theme_sources", {})
         self.loaded_plugins = runtime_data["loaded_plugins"]
+        self._merge_custom_themes_into_runtime()
         set_icon_overrides(runtime_data["icon_overrides"])
+
+    def _normalize_custom_theme_colors(self, colors):
+        """Normalize custom theme palette values into expected keys."""
+        if not isinstance(colors, dict):
+            return {
+                "background_color": "#151a18",
+                "border_color": "#2f7a5d",
+                "accent_color": "#4bbf8a",
+            }
+
+        background = colors.get("background_color") or colors.get("background")
+        border = colors.get("border_color") or colors.get("border")
+        accent = colors.get("accent_color") or colors.get("accent")
+
+        background = background.strip() if isinstance(background, str) and background.strip() else "#151a18"
+        border = border.strip() if isinstance(border, str) and border.strip() else "#2f7a5d"
+        accent = accent.strip() if isinstance(accent, str) and accent.strip() else "#4bbf8a"
+
+        return {
+            "background_color": background,
+            "border_color": border,
+            "accent_color": accent,
+        }
+
+    def _merge_custom_themes_into_runtime(self):
+        """Merge persisted user custom themes into runtime theme list."""
+        custom_themes = self.global_settings.get("custom_themes", {})
+        if not isinstance(custom_themes, dict):
+            return
+
+        for theme_name, palette in custom_themes.items():
+            if not isinstance(theme_name, str) or not theme_name.strip():
+                continue
+
+            clean_name = theme_name.strip()
+            self.theme_files[clean_name] = self._normalize_custom_theme_colors(palette)
+            self.theme_sources[clean_name] = "User custom"
+
+    def save_custom_theme(self, theme_name, colors):
+        """Persist a user-created custom theme and inject it into runtime theme list."""
+        if not isinstance(theme_name, str) or not theme_name.strip():
+            return False
+
+        clean_name = theme_name.strip()
+        palette = self._normalize_custom_theme_colors(colors)
+
+        custom_themes = self.global_settings.get("custom_themes", {})
+        if not isinstance(custom_themes, dict):
+            custom_themes = {}
+
+        custom_themes[clean_name] = palette
+        self.global_settings["custom_themes"] = custom_themes
+        self.theme_files[clean_name] = palette
+        self.theme_sources[clean_name] = "User custom"
+        self.save_global_settings()
+        return True
+
+    def delete_custom_theme(self, theme_name):
+        """Delete a user custom theme from settings/runtime state."""
+        if not isinstance(theme_name, str) or not theme_name.strip():
+            return False
+
+        clean_name = theme_name.strip()
+        custom_themes = self.global_settings.get("custom_themes", {})
+        if not isinstance(custom_themes, dict) or clean_name not in custom_themes:
+            return False
+
+        custom_themes.pop(clean_name, None)
+        self.global_settings["custom_themes"] = custom_themes
+
+        self.theme_files.pop(clean_name, None)
+        self.theme_sources.pop(clean_name, None)
+
+        if self.global_settings.get("theme") == clean_name:
+            self.global_settings["theme"] = "Dark (Default)"
+            self.apply_theme("Dark (Default)")
+
+        self.save_global_settings()
+        return True
 
     def _rebuild_icon_sidebar(self):
         """Rebuild stratagem sidebar list after plugin/theme runtime changes."""
@@ -467,7 +547,7 @@ class StratagemApp(QMainWindow):
 
         self.apply_theme(theme_name)
         self.refresh_main_plugins_page()
-        self.show_status("Plugins applied and reloaded", 2200)
+        self.show_status("Customizations applied and reloaded", 2200)
 
     def initUI(self):
         """Initialize the user interface"""
@@ -510,13 +590,13 @@ class StratagemApp(QMainWindow):
         """Create collapsible left navigation bar with quick actions."""
         nav_widget = QWidget()
         nav_widget.setObjectName("left_nav_bar")
-        nav_widget.setFixedWidth(160)
         self.nav_widget = nav_widget
         self.nav_expanded = True
 
         nav_layout = QVBoxLayout(nav_widget)
         nav_layout.setContentsMargins(8, 8, 8, 8)
         nav_layout.setSpacing(8)
+        self.nav_layout = nav_layout
 
         self.nav_toggle_btn = QPushButton()
         self.nav_toggle_btn.setObjectName("nav_toggle_btn")
@@ -530,12 +610,6 @@ class StratagemApp(QMainWindow):
         self.nav_home_btn.clicked.connect(self.show_main_section)
         nav_layout.addWidget(self.nav_home_btn)
 
-        self.nav_plugins_btn = QPushButton()
-        self.nav_plugins_btn.setObjectName("nav_icon_btn")
-        self.nav_plugins_btn.setToolTip("Plugins")
-        self.nav_plugins_btn.clicked.connect(self.show_plugins_section)
-        nav_layout.addWidget(self.nav_plugins_btn)
-
         nav_layout.addStretch(1)
 
         self.nav_settings_btn = QPushButton()
@@ -545,44 +619,55 @@ class StratagemApp(QMainWindow):
         nav_layout.addWidget(self.nav_settings_btn)
 
         root_layout.addWidget(nav_widget)
+        self._apply_left_nav_layout_state()
         self._update_left_nav_labels()
+
+    def _apply_left_nav_layout_state(self):
+        """Apply width and margins for expanded/collapsed left nav states."""
+        if not hasattr(self, "nav_widget"):
+            return
+
+        collapsed = not self.nav_expanded
+        nav_buttons = [
+            self.nav_toggle_btn,
+            self.nav_home_btn,
+            self.nav_settings_btn,
+        ]
+        for btn in nav_buttons:
+            btn.setProperty("collapsed", collapsed)
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+            btn.update()
+
+        if self.nav_expanded:
+            self.nav_widget.setFixedWidth(160)
+            if hasattr(self, "nav_layout"):
+                self.nav_layout.setContentsMargins(8, 8, 8, 8)
+        else:
+            self.nav_widget.setFixedWidth(46)
+            if hasattr(self, "nav_layout"):
+                self.nav_layout.setContentsMargins(8, 8, 8, 8)
 
     def _update_left_nav_labels(self):
         """Update nav button labels based on expanded/collapsed state."""
         if self.nav_expanded:
             self.nav_toggle_btn.setText("☰  Menu")
             self.nav_home_btn.setText("☠  Helldivers")
-            self.nav_plugins_btn.setText("🔌  Plugins")
             self.nav_settings_btn.setText("⚙  Settings")
         else:
             self.nav_toggle_btn.setText("☰")
             self.nav_home_btn.setText("☠")
-            self.nav_plugins_btn.setText("🔌")
             self.nav_settings_btn.setText("⚙")
 
     def toggle_left_nav_bar(self):
         """Collapse or expand left navigation bar."""
         self.nav_expanded = not self.nav_expanded
-        target_width = 160 if self.nav_expanded else 46
-        if hasattr(self, "nav_widget"):
-            self.nav_widget.setFixedWidth(target_width)
+        self._apply_left_nav_layout_state()
         self._update_left_nav_labels()
         QTimer.singleShot(0, self.update_header_widths)
 
     def show_main_section(self):
         """Show default commander section."""
-        if not self._prepare_leave_plugin_creator():
-            return
-
-        if self._macro_forced_by_plugins:
-            previous_enabled = bool(self._macro_state_before_plugins)
-            self.set_macros_enabled(previous_enabled, notify=False)
-            self._macro_forced_by_plugins = False
-            self._macro_state_before_plugins = None
-
-        if hasattr(self, "macros_toggle"):
-            self.macros_toggle.setEnabled(True)
-
         if hasattr(self, "content_stack"):
             self.content_stack.setCurrentIndex(0)
         if hasattr(self, "top_bar_widget"):
@@ -591,30 +676,6 @@ class StratagemApp(QMainWindow):
             self.status_label.show()
         if hasattr(self, "status_spacer"):
             self.status_spacer.show()
-
-    def show_plugins_section(self):
-        """Show in-app plugins section and refresh its list."""
-        if not self.show_plugins_list_view(confirm_unsaved=True, reset_form=False):
-            return
-
-        if not self._macro_forced_by_plugins:
-            self._macro_state_before_plugins = self.global_settings.get("macros_enabled", False)
-
-        self.set_macros_enabled(False, notify=False)
-        self._macro_forced_by_plugins = True
-
-        if hasattr(self, "macros_toggle"):
-            self.macros_toggle.setEnabled(False)
-
-        if hasattr(self, "content_stack"):
-            self.content_stack.setCurrentIndex(1)
-        if hasattr(self, "top_bar_widget"):
-            self.top_bar_widget.hide()
-        if hasattr(self, "status_label"):
-            self.status_label.hide()
-        if hasattr(self, "status_spacer"):
-            self.status_spacer.hide()
-        self.refresh_main_plugins_page()
 
     def _load_app_icon(self):
         """Load application icon"""
@@ -669,9 +730,10 @@ class StratagemApp(QMainWindow):
         btn_import.setIconSize(QSize(18, 18))
         btn_export.setIconSize(QSize(18, 18))
 
-        self.profile_box = QComboBox()
+        self.profile_box = DeletableComboBox()
         self.profile_box.setObjectName("profile_box_styled")
         self.profile_box.currentIndexChanged.connect(self.profile_changed)
+        self.profile_box.deleteRequested.connect(self.delete_profile_from_select)
 
         profile_row = QHBoxLayout()
         profile_row.setSpacing(6)
@@ -730,7 +792,7 @@ class StratagemApp(QMainWindow):
         main_layout.addWidget(self.status_spacer)
 
     def _create_main_content(self, main_layout):
-        """Create switchable main content sections (commander/plugins)."""
+        """Create main commander content section."""
         self.content_stack = QStackedWidget()
 
         commander_widget = QWidget()
@@ -740,9 +802,6 @@ class StratagemApp(QMainWindow):
         self._create_sidebar(commander_layout)
         self._create_numpad_grid(commander_layout)
         self.content_stack.addWidget(commander_widget)
-
-        plugins_widget = self._create_plugins_main_section()
-        self.content_stack.addWidget(plugins_widget)
 
         main_layout.addWidget(self.content_stack)
 
@@ -1607,11 +1666,46 @@ class StratagemApp(QMainWindow):
         files = [os.path.splitext(f)[0] for f in os.listdir(PROFILES_DIR) if f.endswith(".json")]
         if not files:
             self.profile_box.addItem("Create new profile")
+            self.profile_box.setItemDeletable(0, False)
         else:
-            self.profile_box.addItems(files)
+            for profile_name in sorted(files):
+                self.profile_box.addItem(profile_name)
+                self.profile_box.setItemDeletable(self.profile_box.count() - 1, True)
             self.profile_box.addItem("Create new profile")
+            self.profile_box.setItemDeletable(self.profile_box.count() - 1, False)
         self.profile_box.blockSignals(False)
         self.profile_changed()
+
+    def delete_profile_from_select(self, profile_name, _index=None, _user_data=None):
+        """Delete a profile from profile selector after confirmation."""
+        if not isinstance(profile_name, str) or profile_name == "Create new profile":
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Delete Profile",
+            f"Delete profile '{profile_name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        profile_path = os.path.join(PROFILES_DIR, f"{profile_name}.json")
+        try:
+            if os.path.exists(profile_path):
+                os.remove(profile_path)
+        except Exception as e:
+            QMessageBox.warning(self, "Delete Profile", f"Failed to delete profile:\n{e}")
+            return
+
+        if self.global_settings.get("last_profile") == profile_name:
+            self.global_settings["last_profile"] = ""
+            self.save_global_settings()
+
+        self.refresh_profiles()
+        self.profile_box.setCurrentText("Create new profile")
+        self.show_status("PROFILE DELETED")
 
     def profile_changed(self):
         """Handle profile change"""

@@ -20,6 +20,7 @@ DEFAULT_SETTINGS = {
     "auto_check_updates": True,
     "autoload_profile": False,
     "theme": "Dark (Default)",
+    "custom_themes": {},
 }
 
 NUMPAD_LAYOUT = [
