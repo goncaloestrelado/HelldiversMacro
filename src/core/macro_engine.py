@@ -63,12 +63,11 @@ class MacroEngine:
             slot = slots.get(str(event.scan_code))
             
             if slot and slot.assigned_stratagem:
-                if getattr(event, 'is_keypad', True):
-                    stratagem_name = slot.assigned_stratagem
-                    seq = STRATAGEMS.get(stratagem_name)
-                    if seq:
-                        slot.run_macro(stratagem_name, seq, slot.label_text)
-                    return False  # Suppress the keypad key
+                stratagem_name = slot.assigned_stratagem
+                seq = STRATAGEMS.get(stratagem_name)
+                if seq:
+                    slot.run_macro(stratagem_name, seq, slot.label_text)
+                return False  # Suppress the key
         
         return True  # Allow the key through
     
