@@ -9,6 +9,10 @@ import keyboard
 from .stratagem_data import STRATAGEMS
 from ..config.constants import KEYBIND_MAPPINGS
 
+# Scan codes that are part of the default numpad layout
+# These need is_keypad check to avoid conflicts with arrow keys
+NUMPAD_SCAN_CODES = {'53', '55', '74', '71', '72', '73', '78', '75', '76', '77', '79', '80', '81', '28', '82', '83'}
+
 
 class MacroEngine:
     """Manages macro execution and keyboard hooks"""
@@ -60,14 +64,21 @@ class MacroEngine:
         """
         if event.event_type == keyboard.KEY_DOWN:
             slots = self.get_slots()
-            slot = slots.get(str(event.scan_code))
+            scan_code_str = str(event.scan_code)
+            slot = slots.get(scan_code_str)
             
             if slot and slot.assigned_stratagem:
-                stratagem_name = slot.assigned_stratagem
-                seq = STRATAGEMS.get(stratagem_name)
-                if seq:
-                    slot.run_macro(stratagem_name, seq, slot.label_text)
-                return False  # Suppress the key
+                # For numpad keys, verify it's actually from the numpad (not arrow keys)
+                # For custom keys, allow any key with that scan code
+                is_numpad_key = scan_code_str in NUMPAD_SCAN_CODES
+                is_keypad = getattr(event, 'is_keypad', False)
+                
+                if not is_numpad_key or is_keypad:
+                    stratagem_name = slot.assigned_stratagem
+                    seq = STRATAGEMS.get(stratagem_name)
+                    if seq:
+                        slot.run_macro(stratagem_name, seq, slot.label_text)
+                    return False  # Suppress the key
         
         return True  # Allow the key through
     
