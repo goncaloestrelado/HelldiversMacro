@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
                              QPushButton, QSpinBox, QListWidget, QStackedWidget,
                              QComboBox, QCheckBox, QMessageBox, QApplication, QWidget,
                              QInputDialog, QListWidgetItem, QLineEdit, QColorDialog)
-from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtCore import Qt, QUrl, QObject, pyqtSignal
 from PyQt6.QtGui import QFont, QDesktopServices
 
 from ..config.constants import ARROW_ICONS
@@ -190,12 +190,19 @@ class PluginListItemWidget(QWidget):
         super().leaveEvent(event)
 
 
+class _WikiRefreshSignals(QObject):
+    done = pyqtSignal(object, object)
+    error = pyqtSignal(str)
+    request_count = pyqtSignal(int, int)
+
+
 class SettingsWindow(QDialog):
     """Comprehensive settings window with tabs"""
-    
+
     def __init__(self, parent=None, initial_tab=0):
         super().__init__(parent)
         self.parent_app = parent
+        self.wiki_cache_cleared = False
         self.setWindowTitle("Settings")
         self.setFixedSize(600, 400)
         self.setObjectName("settings_window")
@@ -221,7 +228,7 @@ class SettingsWindow(QDialog):
         self.tab_list.addItem("Notifications")
         self.tab_list.addItem("Appearance")
         self.tab_list.addItem("Windows")
-        self.tab_list.addItem("Customizations")
+        self.tab_list.addItem("Wiki Data")
         self.tab_list.itemClicked.connect(self.switch_tab)
         content_layout.addWidget(self.tab_list)
         
@@ -234,7 +241,7 @@ class SettingsWindow(QDialog):
         self._create_notifications_tab()
         self._create_appearance_tab()
         self._create_windows_tab()
-        self._create_plugins_tab()
+        self._create_wiki_tab()
         
         content_layout.addWidget(self.content_stack)
         main_layout.addLayout(content_layout)
@@ -556,7 +563,6 @@ class SettingsWindow(QDialog):
             "custom_bg": self.custom_bg_input.text().strip() if hasattr(self, "custom_bg_input") else None,
             "custom_border": self.custom_border_input.text().strip() if hasattr(self, "custom_border_input") else None,
             "custom_accent": self.custom_accent_input.text().strip() if hasattr(self, "custom_accent_input") else None,
-            "enabled_plugins": sorted(self.get_checked_plugin_manifest_paths()),
         }
 
     def _set_initial_settings_state(self):
@@ -985,9 +991,157 @@ class SettingsWindow(QDialog):
 
         self.refresh_plugin_list()
         QMessageBox.information(self, "Customization Removed", message)
-    
+
+    def _create_wiki_tab(self):
+        from ..managers import wiki_fetcher
+
+        wiki_widget = QWidget()
+        wiki_layout = QVBoxLayout(wiki_widget)
+
+        title_label = QLabel("Wiki Data")
+        title_label.setObjectName("settings_label")
+        wiki_layout.addWidget(title_label)
+
+        desc = QLabel(
+            "Stratagem names, codes and icons are fetched directly from the\n"
+            "Helldivers wiki and cached locally. The cache refreshes automatically\n"
+            "on startup when it is older than 24 hours."
+        )
+        desc.setWordWrap(True)
+        desc.setStyleSheet("color: #aaa; font-size: 11px; margin-bottom: 8px;")
+        wiki_layout.addWidget(desc)
+
+        ts = wiki_fetcher.get_cache_timestamp()
+        if ts:
+            from datetime import datetime
+            dt = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+            status_text = f"Last updated: {dt}"
+        else:
+            status_text = "No local cache yet."
+
+        self._wiki_status_label = QLabel(status_text)
+        self._wiki_status_label.setStyleSheet("color: #ccc; font-size: 12px; margin-bottom: 6px;")
+        wiki_layout.addWidget(self._wiki_status_label)
+
+        request_limit = wiki_fetcher.get_request_limit_per_fetch()
+        self._wiki_request_label = QLabel(f"App requests this fetch: 0 / {request_limit}")
+        self._wiki_request_label.setStyleSheet("color: #8fbf8f; font-size: 11px; margin-bottom: 8px;")
+        wiki_layout.addWidget(self._wiki_request_label)
+
+        self._wiki_refresh_btn = QPushButton("Update Now")
+        self._wiki_refresh_btn.setObjectName("settings_apply")
+        self._wiki_refresh_btn.setFixedWidth(130)
+        self._wiki_refresh_btn.clicked.connect(self._trigger_wiki_refresh)
+
+        self._wiki_clear_cache_btn = QPushButton("Clear Cache")
+        self._wiki_clear_cache_btn.setObjectName("settings_cancel")
+        self._wiki_clear_cache_btn.setFixedWidth(130)
+        self._wiki_clear_cache_btn.clicked.connect(self._clear_wiki_cache)
+
+        wiki_btn_row = QHBoxLayout()
+        wiki_btn_row.setSpacing(8)
+        wiki_btn_row.addWidget(self._wiki_refresh_btn)
+        wiki_btn_row.addWidget(self._wiki_clear_cache_btn)
+        wiki_btn_row.addStretch(1)
+        wiki_layout.addLayout(wiki_btn_row)
+
+        wiki_layout.addStretch(1)
+        self.content_stack.addWidget(wiki_widget)
+
+    def _trigger_wiki_refresh(self):
+        from ..managers import wiki_fetcher
+        self._wiki_refresh_btn.setEnabled(False)
+        self._wiki_clear_cache_btn.setEnabled(False)
+        self._wiki_refresh_btn.setText("Updating...")
+        self._wiki_status_label.setText("Fetching from wiki...")
+
+        if self.parent_app and hasattr(self.parent_app, "_set_sidebar_loading"):
+            self.parent_app._set_sidebar_loading(True, "Fetching stratagems from wiki...\n(requests: 0)")
+
+        self._wiki_signals = _WikiRefreshSignals()
+        self._wiki_signals.done.connect(self._on_wiki_refresh_done)
+        self._wiki_signals.error.connect(self._on_wiki_refresh_error)
+        self._wiki_signals.request_count.connect(self._on_wiki_request_count)
+
+        wiki_fetcher.refresh_in_background(
+            on_complete=lambda s, i: self._wiki_signals.done.emit(s, i),
+            on_error=lambda e: self._wiki_signals.error.emit(e),
+            on_request_count=lambda count, limit: self._wiki_signals.request_count.emit(count, limit),
+        )
+
+    def _on_wiki_request_count(self, count, limit):
+        self._wiki_request_label.setText(f"App requests this fetch: {count} / {limit}")
+        if self.parent_app and hasattr(self.parent_app, "_set_sidebar_loading"):
+            self.parent_app._set_sidebar_loading(True, f"Fetching stratagems from wiki...\n(requests: {count})")
+
+    def _on_wiki_refresh_done(self, stratagems, icons):
+        from ..managers import wiki_fetcher
+        from datetime import datetime
+        ts = wiki_fetcher.get_cache_timestamp()
+        if ts:
+            dt = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+            text = f"Last updated: {dt}"
+        else:
+            text = "Updated successfully."
+        self._wiki_status_label.setText(text)
+        self._wiki_refresh_btn.setText("Update Now")
+        self._wiki_refresh_btn.setEnabled(True)
+        self._wiki_clear_cache_btn.setEnabled(True)
+
+        if self.parent_app:
+            if hasattr(self.parent_app, "_load_runtime_plugin_data"):
+                self.parent_app._load_runtime_plugin_data()
+            if hasattr(self.parent_app, "_rebuild_icon_sidebar"):
+                self.parent_app._rebuild_icon_sidebar()
+            if hasattr(self.parent_app, "_set_sidebar_loading"):
+                self.parent_app._set_sidebar_loading(False)
+            if hasattr(self.parent_app, "show_status"):
+                self.parent_app.show_status("Stratagems updated from wiki", 2200)
+
+        QMessageBox.information(
+            self,
+            "Wiki Data Updated",
+            "Stratagem data updated from the wiki.",
+        )
+
+    def _on_wiki_refresh_error(self, error_msg):
+        self._wiki_status_label.setText("Update failed. Check your connection.")
+        self._wiki_refresh_btn.setText("Update Now")
+        self._wiki_refresh_btn.setEnabled(True)
+        self._wiki_clear_cache_btn.setEnabled(True)
+        if self.parent_app and hasattr(self.parent_app, "_set_sidebar_loading"):
+            self.parent_app._set_sidebar_loading(False)
+
+    def _clear_wiki_cache(self):
+        from ..managers import wiki_fetcher
+        reply = QMessageBox.question(
+            self,
+            "Clear Wiki Cache",
+            "Clear cached wiki stratagem data and icons?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        ok = wiki_fetcher.clear_cache()
+        if ok:
+            self.wiki_cache_cleared = True
+            self._wiki_status_label.setText("Cache cleared. Data will refetch on return to main view.")
+            request_limit = wiki_fetcher.get_request_limit_per_fetch()
+            self._wiki_request_label.setText(f"App requests this fetch: 0 / {request_limit}")
+            if self.parent_app:
+                if hasattr(self.parent_app, "_load_runtime_plugin_data"):
+                    self.parent_app._load_runtime_plugin_data()
+                if hasattr(self.parent_app, "_rebuild_icon_sidebar"):
+                    self.parent_app._rebuild_icon_sidebar()
+                if hasattr(self.parent_app, "show_status"):
+                    self.parent_app.show_status("Wiki cache cleared", 1800)
+            QMessageBox.information(self, "Wiki Cache", "Wiki cache cleared.")
+        else:
+            QMessageBox.warning(self, "Wiki Cache", "Failed to clear wiki cache.")
+
     def _create_bottom_buttons(self, main_layout):
-        """Create bottom buttons layout"""
         btn_row = QHBoxLayout()
         
         # Version label on the left (clickable link to releases)
@@ -1094,10 +1248,6 @@ class SettingsWindow(QDialog):
         # Handle admin privilege change
         if old_require_admin != new_require_admin:
             self._handle_admin_privilege_change(new_require_admin)
-
-        checked_manifest_paths = self.get_checked_plugin_manifest_paths()
-        if hasattr(self.parent_app, "apply_plugin_manifest_selection"):
-            self.parent_app.apply_plugin_manifest_selection(checked_manifest_paths)
         
         self.accept()
     

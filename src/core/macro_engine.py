@@ -6,7 +6,6 @@ Handles keyboard hooking and macro execution
 import time
 import winsound
 import keyboard
-from .stratagem_data import STRATAGEMS
 from ..config.constants import KEYBIND_MAPPINGS
 
 # Scan codes that are part of the default numpad layout
@@ -17,17 +16,19 @@ NUMPAD_SCAN_CODES = {'53', '55', '74', '71', '72', '73', '78', '75', '76', '77',
 class MacroEngine:
     """Manages macro execution and keyboard hooks"""
     
-    def __init__(self, get_slots_callback, get_settings_callback, map_direction_callback):
+    def __init__(self, get_slots_callback, get_settings_callback, get_stratagems_callback, map_direction_callback):
         """
         Initialize macro engine
         
         Args:
             get_slots_callback: Function that returns dict of slots
             get_settings_callback: Function that returns global settings dict
+            get_stratagems_callback: Function that returns current stratagem dict
             map_direction_callback: Function that maps direction to key
         """
         self.get_slots = get_slots_callback
         self.get_settings = get_settings_callback
+        self.get_stratagems = get_stratagems_callback
         self.map_direction = map_direction_callback
         self.hooks_active = False
     
@@ -75,7 +76,7 @@ class MacroEngine:
                 
                 if not is_numpad_key or is_keypad:
                     stratagem_name = slot.assigned_stratagem
-                    seq = STRATAGEMS.get(stratagem_name)
+                    seq = self.get_stratagems().get(stratagem_name)
                     if seq:
                         slot.run_macro(stratagem_name, seq, slot.label_text)
                     return False  # Suppress the key

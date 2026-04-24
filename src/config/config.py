@@ -113,20 +113,28 @@ def run_as_admin():
 
 
 def find_svg_path(name):
-    """Find SVG file for stratagem, with simplified lookup since files now match official names"""
     override_path = _ICON_OVERRIDE_PATHS.get(name)
     if override_path and os.path.exists(override_path):
         return override_path
 
-    base_path = getattr(sys, '_MEIPASS', os.path.abspath("."))
-    assets_lookup = os.path.join(base_path, ASSETS_DIR)
-    target = normalize(name)
-    
-    for root, dirs, files in os.walk(assets_lookup):
-        for f in files:
-            if f.endswith(".svg"):
-                if normalize(os.path.splitext(f)[0]) == target:
-                    return os.path.join(root, f)
+    # TEST: skip local assets, use only wiki cache
+    try:
+        from ..managers.wiki_fetcher import get_wiki_icon_path
+        wiki_path = get_wiki_icon_path(name)
+        if wiki_path and os.path.exists(wiki_path):
+            return wiki_path
+    except Exception:
+        pass
+
+    # base_path = getattr(sys, '_MEIPASS', os.path.abspath("."))
+    # assets_lookup = os.path.join(base_path, ASSETS_DIR)
+    # target = normalize(name)
+    # for root, dirs, files in os.walk(assets_lookup):
+    #     for f in files:
+    #         if f.endswith(".svg"):
+    #             if normalize(os.path.splitext(f)[0]) == target:
+    #                 return os.path.join(root, f)
+
     return None
 
 

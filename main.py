@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QGridLayout, QL
                              QMessageBox, QListWidget, QToolButton, QCheckBox,
                              QSizePolicy, QListWidgetItem, QSlider, QInputDialog,
                              QFileDialog, QStackedWidget, QFormLayout, QDialog, QBoxLayout,
-                             QPlainTextEdit, QStyle, QColorDialog)
+                             QPlainTextEdit, QStyle, QColorDialog, QProgressBar)
 from PyQt6.QtCore import Qt, QTimer, QEvent, QSize, pyqtSignal, QByteArray, QPoint
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QCursor, QKeySequence
 from PyQt6.QtSvg import QSvgRenderer
@@ -16,7 +16,6 @@ from PyQt6.QtSvg import QSvgRenderer
 from src.config import (PROFILES_DIR, ASSETS_DIR, get_theme_stylesheet, load_settings, 
                        save_settings, get_asset_path, set_icon_overrides)
 from src.config.constants import NUMPAD_LAYOUT, THEME_FILES, KEYBIND_MAPPINGS, NUMPAD_GRID_WIDTH, NUMPAD_GRID_HEIGHT
-from src.core.stratagem_data import STRATAGEMS_BY_DEPARTMENT as BASE_STRATAGEMS_BY_DEPARTMENT
 from src.config.version import VERSION, APP_NAME
 from src.ui.dialogs import TestEnvironment, SettingsWindow
 from src.ui.widgets import DraggableIcon, NumpadSlot, comm, CollapsibleDepartmentHeader, DeletableComboBox
@@ -25,6 +24,7 @@ from src.managers.plugin_manager import PluginManager
 from src.core.macro_engine import MacroEngine
 from src.ui.tray_manager import TrayManager
 from src.managers.update_manager import check_for_updates_startup
+from src.managers import wiki_fetcher
 
 
 DEFAULT_SLOT_LAYOUT_NAME = "Default Numpad"
@@ -447,6 +447,10 @@ class StratagemEntryWidget(QWidget):
 
 class StratagemApp(QMainWindow):
     """Main application window for Helldivers 2 Numpad Commander"""
+
+    wiki_fetch_started = pyqtSignal()
+    wiki_fetch_finished = pyqtSignal(bool)
+    wiki_fetch_request_count = pyqtSignal(int, int)
     
     def __init__(self):
         super().__init__()
@@ -499,10 +503,14 @@ class StratagemApp(QMainWindow):
         self.macro_engine = MacroEngine(
             lambda: self.slots,
             lambda: self.global_settings,
+            lambda: self.stratagems,
             self.map_direction_to_key
         )
         
         self.initUI()
+        self.wiki_fetch_started.connect(self._on_wiki_fetch_started)
+        self.wiki_fetch_finished.connect(self._on_wiki_fetch_finished)
+        self.wiki_fetch_request_count.connect(self._on_wiki_fetch_request_count)
         self.refresh_profiles()
         
         self.tray_manager = TrayManager(
@@ -512,11 +520,76 @@ class StratagemApp(QMainWindow):
         self.tray_manager.show_window.connect(self._show_window)
         self.tray_manager.quit_app.connect(self.quit_application)
         self.tray_manager.setup()
-        
+
         self._autoload_last_profile()
-        
+
         if self.global_settings.get("auto_check_updates", True):
             QTimer.singleShot(1000, self.check_for_updates_startup)
+
+        QTimer.singleShot(3000, self._check_wiki_for_updates)
+
+    def _check_wiki_for_updates(self, force=False):
+        def _worker():
+            updated = False
+            try:
+                self.wiki_fetch_started.emit()
+                if force or wiki_fetcher.has_new_content():
+                    wiki_fetcher.fetch_and_cache(
+                        on_request_count=lambda count, limit: self.wiki_fetch_request_count.emit(count, limit)
+                    )
+                    updated = True
+            except Exception as e:
+                print(f"[WikiFetcher] Startup check failed: {e}")
+            finally:
+                self.wiki_fetch_finished.emit(updated)
+
+        import threading
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _start_wiki_refresh(self):
+        wiki_fetcher.refresh_in_background(on_complete=self._on_wiki_refresh_done)
+
+    def _on_wiki_refresh_done(self, stratagems, icons):
+        pass
+
+    def _on_wiki_fetch_started(self):
+        self._set_sidebar_loading(True, "Fetching stratagems from wiki...\n(requests: 0)")
+
+    def _on_wiki_fetch_request_count(self, count, limit):
+        self._set_sidebar_loading(True, f"Fetching stratagems from wiki...\n(requests: {count})")
+
+    def _on_wiki_fetch_finished(self, updated):
+        if updated:
+            self._load_runtime_plugin_data()
+            self._rebuild_icon_sidebar()
+            self.show_status("Stratagems updated from wiki", 2200)
+        self._set_sidebar_loading(False)
+
+    def _set_sidebar_loading(self, loading, message=""):
+        if hasattr(self, "icon_loading_label") and isinstance(message, str) and message.strip():
+            self.icon_loading_label.setText(message)
+        if hasattr(self, "icon_loading_overlay"):
+            self.icon_loading_overlay.setVisible(bool(loading))
+        if hasattr(self, "search"):
+            self.search.setEnabled(not loading)
+        if hasattr(self, "toggle_all_btn"):
+            self.toggle_all_btn.setEnabled(not loading)
+        self._update_empty_sidebar_state()
+
+    def _retry_fetch_from_empty_state(self):
+        self._check_wiki_for_updates(force=True)
+
+    def _update_empty_sidebar_state(self):
+        if not hasattr(self, "icon_empty_overlay"):
+            return
+
+        is_loading = bool(getattr(self, "icon_loading_overlay", None) and self.icon_loading_overlay.isVisible())
+        has_data = bool(getattr(self, "icon_items", []))
+        show_empty = (not is_loading) and (not has_data)
+
+        self.icon_empty_overlay.setVisible(show_empty)
+        if hasattr(self, "icon_empty_retry_btn"):
+            self.icon_empty_retry_btn.setEnabled(not is_loading)
 
     def _sanitize_layout_name(self, name):
         """Return a cleaned layout name, or empty string when invalid."""
@@ -725,15 +798,19 @@ class StratagemApp(QMainWindow):
         return [(scan, label, row, col, rowspan, colspan, False) for scan, label, row, col, rowspan, colspan in NUMPAD_LAYOUT]
 
     def _load_runtime_plugin_data(self):
-        """Load merged runtime plugin data into app state."""
-        runtime_data = PluginManager.build_runtime_data(BASE_STRATAGEMS_BY_DEPARTMENT, THEME_FILES)
-        self.stratagems_by_department = runtime_data["stratagems_by_department"]
-        self.stratagems = runtime_data["stratagems"]
-        self.theme_files = runtime_data["theme_files"]
-        self.theme_sources = runtime_data.get("theme_sources", {})
-        self.loaded_plugins = runtime_data["loaded_plugins"]
+        wiki_stratagems, _ = wiki_fetcher.load_cache()
+        base_data = wiki_stratagems if wiki_stratagems else {}
+        self.stratagems_by_department = dict(base_data)
+        self.stratagems = {}
+        for department_stratagems in self.stratagems_by_department.values():
+            if isinstance(department_stratagems, dict):
+                self.stratagems.update(department_stratagems)
+
+        self.theme_files = dict(THEME_FILES)
+        self.theme_sources = {name: "Built-in" for name in self.theme_files}
+        self.loaded_plugins = []
         self._merge_custom_themes_into_runtime()
-        set_icon_overrides(runtime_data["icon_overrides"])
+        set_icon_overrides({})
 
     def _normalize_custom_theme_colors(self, colors):
         """Normalize custom theme palette values into expected keys."""
@@ -831,6 +908,7 @@ class StratagemApp(QMainWindow):
         self._populate_icon_list()
         self.filter_icons(search_text)
         self.update_header_widths()
+        self._update_empty_sidebar_state()
 
     def apply_plugin_manifest_selection(self, selected_manifest_paths):
         """Apply plugin checkbox selection, reload runtime data and refresh sidebar/themes."""
@@ -1959,14 +2037,67 @@ class StratagemApp(QMainWindow):
         self.icon_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.icon_list.installEventFilter(self)
         self.icon_list.viewport().installEventFilter(self)
+
+        icon_list_container = QWidget()
+        icon_list_stack = QGridLayout(icon_list_container)
+        icon_list_stack.setContentsMargins(0, 0, 0, 0)
+        icon_list_stack.setSpacing(0)
+        icon_list_stack.addWidget(self.icon_list, 0, 0)
+
+        self.icon_loading_overlay = QWidget(icon_list_container)
+        self.icon_loading_overlay.setObjectName("icon_loading_overlay")
+        self.icon_loading_overlay.setStyleSheet("background: rgba(0, 0, 0, 120);")
+        overlay_layout = QVBoxLayout(self.icon_loading_overlay)
+        overlay_layout.setContentsMargins(18, 18, 18, 18)
+        overlay_layout.setSpacing(8)
+        overlay_layout.addStretch(1)
+
+        self.icon_loading_label = QLabel("Fetching stratagems from wiki...")
+        self.icon_loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.icon_loading_label.setStyleSheet("color: #e0e0e0; font-weight: bold;")
+        overlay_layout.addWidget(self.icon_loading_label)
+
+        self.icon_loading_spinner = QProgressBar()
+        self.icon_loading_spinner.setRange(0, 0)
+        self.icon_loading_spinner.setFixedWidth(220)
+        self.icon_loading_spinner.setTextVisible(False)
+        overlay_layout.addWidget(self.icon_loading_spinner, 0, Qt.AlignmentFlag.AlignHCenter)
+        overlay_layout.addStretch(1)
+
+        icon_list_stack.addWidget(self.icon_loading_overlay, 0, 0)
+        self.icon_loading_overlay.hide()
+
+        self.icon_empty_overlay = QWidget(icon_list_container)
+        self.icon_empty_overlay.setObjectName("icon_empty_overlay")
+        self.icon_empty_overlay.setStyleSheet("background: rgba(0, 0, 0, 120);")
+        empty_layout = QVBoxLayout(self.icon_empty_overlay)
+        empty_layout.setContentsMargins(18, 18, 18, 18)
+        empty_layout.setSpacing(10)
+        empty_layout.addStretch(1)
+
+        self.icon_empty_label = QLabel("No stratagem data loaded.\nCheck connection and fetch from wiki.")
+        self.icon_empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.icon_empty_label.setStyleSheet("color: #e0e0e0; font-weight: bold;")
+        empty_layout.addWidget(self.icon_empty_label)
+
+        self.icon_empty_retry_btn = QPushButton("Retry Fetch")
+        self.icon_empty_retry_btn.setObjectName("settings_apply")
+        self.icon_empty_retry_btn.setFixedWidth(140)
+        self.icon_empty_retry_btn.clicked.connect(self._retry_fetch_from_empty_state)
+        empty_layout.addWidget(self.icon_empty_retry_btn, 0, Qt.AlignmentFlag.AlignHCenter)
+        empty_layout.addStretch(1)
+
+        icon_list_stack.addWidget(self.icon_empty_overlay, 0, 0)
+        self.icon_empty_overlay.hide()
         
         self.icon_widgets = []
         self.icon_items = []
         self.header_items = []
         
         self._populate_icon_list()
+        self._update_empty_sidebar_state()
         
-        side.addWidget(self.icon_list)
+        side.addWidget(icon_list_container)
         QTimer.singleShot(100, self.update_header_widths)
         
         content_layout.addWidget(side_container)
@@ -2892,11 +3023,11 @@ class StratagemApp(QMainWindow):
 
     def open_settings(self, initial_tab=0):
         """Open settings dialog"""
-        if not self._prepare_leave_plugin_creator():
-            return
         dlg = SettingsWindow(self, initial_tab=initial_tab)
         if dlg.exec():
             self.show_status("Settings applied.")
+            if getattr(dlg, "wiki_cache_cleared", False):
+                self._check_wiki_for_updates()
 
     # Profile management methods
     def refresh_profiles(self):
