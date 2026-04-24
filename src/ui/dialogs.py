@@ -733,6 +733,14 @@ class SettingsWindow(QDialog):
         )
         check_now_btn.clicked.connect(self.check_for_updates)
         windows_layout.addWidget(check_now_btn)
+
+        force_update_btn = QPushButton("Force Update Dialog (Test)")
+        force_update_btn.setStyleSheet(
+            "background: #2a2a2a; color: #ffb347; border: 1px solid #ffb347; "
+            "padding: 8px 16px; border-radius: 4px; font-weight: bold;"
+        )
+        force_update_btn.clicked.connect(self.force_update_dialog)
+        windows_layout.addWidget(force_update_btn)
         
         version_label = QLabel(f"Current Version: {VERSION}")
         version_label.setStyleSheet("color: #888; font-size: 10px; padding: 5px;")
@@ -1203,6 +1211,40 @@ class SettingsWindow(QDialog):
                 self, "No Updates",
                 f"You are running the latest version ({VERSION})."
             )
+
+    def force_update_dialog(self):
+        """Force open update dialog with latest release data for testing."""
+        sender = self.sender()
+        if sender:
+            sender.setEnabled(False)
+            sender.setText("Checking...")
+        QApplication.processEvents()
+
+        result = update_checker.check_for_updates(
+            VERSION, GITHUB_REPO_OWNER, GITHUB_REPO_NAME,
+            install_type=get_install_type()
+        )
+
+        if sender:
+            sender.setEnabled(True)
+            sender.setText("Force Update Dialog (Test)")
+
+        if not result['success']:
+            QMessageBox.warning(
+                self, "Update Check Failed",
+                f"Could not check for updates:\n{result['error']}"
+            )
+            return
+
+        forced_info = dict(result)
+        forced_info['has_update'] = True
+        forced_info['release_notes'] = (
+            "[TEST MODE] This dialog was forced for updater flow testing.\n\n"
+            + forced_info.get('release_notes', 'No release notes available.')
+        )
+
+        dlg = UpdateDialog(forced_info, self.parent_app)
+        dlg.exec()
     
     def apply_and_close(self):
         """Apply all settings and close dialog"""

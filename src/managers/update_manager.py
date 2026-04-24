@@ -253,27 +253,52 @@ class SetupDialog(QDialog):
         self.progress_bar.setValue(100)
         
         try:
-            # Prepare installer arguments
+            installer_args = []
             if self.is_app_installed:
-                # Silent update (or with minimal UI)
-                subprocess.Popen([file_path, '/SILENT'])
+                # Keep the setup wizard visible and ensure installer closes running instances if needed.
+                installer_args = ['/CLOSEAPPLICATIONS', '/FORCECLOSEAPPLICATIONS']
             else:
-                # Install to custom directory
-                install_dir = self.path_input.text()
-                subprocess.Popen([file_path, f'/DIR="{install_dir}"'])
-            
-            QMessageBox.information(
-                self, "Installer Launched",
-                "The installer has been launched. This application will now close.\n\n"
-                "Please complete the installation and restart the application."
+                install_dir = self.path_input.text().strip()
+                installer_args = [f'/DIR={install_dir}']
+
+            subprocess.Popen(
+                [file_path] + installer_args,
+                creationflags=(
+                    getattr(subprocess, 'DETACHED_PROCESS', 0)
+                    | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
+                ),
+                close_fds=True,
             )
-            
-            # Close the application
+
             self.accept()
-            QApplication.quit()
+            self._shutdown_for_update()
             
         except Exception as e:
             self.download_error(f"Failed to launch installer: {str(e)}")
+
+    def _shutdown_for_update(self):
+        """Shut down the app cleanly so update setup can proceed without file locks."""
+        parent = self.parent()
+
+        try:
+            if parent and hasattr(parent, 'macro_engine'):
+                parent.macro_engine.disable()
+        except Exception:
+            pass
+
+        try:
+            if parent and hasattr(parent, 'tray_manager') and hasattr(parent.tray_manager, 'tray_icon'):
+                parent.tray_manager.tray_icon.hide()
+        except Exception:
+            pass
+
+        if parent and hasattr(parent, 'quit_application'):
+            parent.quit_application()
+            return
+
+        app = QApplication.instance()
+        if app:
+            app.quit()
     
     def download_error(self, error_msg):
         """Handle download error"""
