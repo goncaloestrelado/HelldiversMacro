@@ -95,11 +95,11 @@ def _api_get(params, _retries=0):
 
 
 def _is_excluded_title(title):
-    if "/" in title:
-        return True
     if "(disambiguation)" in title:
         return True
     if title.startswith("Template:") or title.startswith("April Fools"):
+        return True
+    if re.search(r"/[a-z]{2}(?:-[a-z]{2})?$", title, re.IGNORECASE):
         return True
     if title in ("Stratagems", "Exosuit (disambiguation)", "Equipment Traits", "Reinforcement Pods"):
         return True
