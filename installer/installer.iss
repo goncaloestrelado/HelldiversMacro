@@ -2,7 +2,7 @@
 ; https://jrsoftware.org/isinfo.php
 
 #define MyAppName "Helldivers 2 - Strat Commander"
-#define MyAppVersion "0.4.0"
+#define MyAppVersion "0.4.1"
 #define MyAppPublisher "Goncalo Estrelado"
 #define MyAppURL "https://github.com/goncaloestrelado/HelldiversMacro"
 #define MyAppExeName "Helldivers2StratCommander.exe"
