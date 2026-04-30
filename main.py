@@ -2,6 +2,7 @@ import sys
 import os
 import ctypes
 import json
+from collections import OrderedDict
 
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QGridLayout, QLabel,
                              QHBoxLayout, QVBoxLayout, QLineEdit, QPushButton, QComboBox,
@@ -499,6 +500,10 @@ class StratagemApp(QMainWindow):
         self.undo_btn = None
         self.save_btn = None
         self.department_expanded_state = {}  # Track which departments are expanded/collapsed
+        self.stratagem_type_map = {}
+        self.icon_organization_mode = self._normalize_icon_organization_mode(
+            self.global_settings.get("icon_organization", "warbond")
+        )
         
         self.macro_engine = MacroEngine(
             lambda: self.slots,
@@ -574,7 +579,16 @@ class StratagemApp(QMainWindow):
             self.search.setEnabled(not loading)
         if hasattr(self, "toggle_all_btn"):
             self.toggle_all_btn.setEnabled(not loading)
+        if hasattr(self, "icon_organize_box"):
+            self.icon_organize_box.setEnabled(not loading)
         self._update_empty_sidebar_state()
+
+    def _normalize_icon_organization_mode(self, mode):
+        """Normalize sidebar icon organization mode to supported values."""
+        if not isinstance(mode, str):
+            return "warbond"
+        normalized = mode.strip().lower()
+        return normalized if normalized in ("warbond", "type") else "warbond"
 
     def _retry_fetch_from_empty_state(self):
         self._check_wiki_for_updates(force=True)
@@ -798,8 +812,9 @@ class StratagemApp(QMainWindow):
         return [(scan, label, row, col, rowspan, colspan, False) for scan, label, row, col, rowspan, colspan in NUMPAD_LAYOUT]
 
     def _load_runtime_plugin_data(self):
-        wiki_stratagems, _ = wiki_fetcher.load_cache()
+        wiki_stratagems, _, wiki_type_map = wiki_fetcher.load_cache_with_metadata()
         base_data = wiki_stratagems if wiki_stratagems else {}
+        self.stratagem_type_map = dict(wiki_type_map) if isinstance(wiki_type_map, dict) else {}
         self.stratagems_by_department = dict(base_data)
         self.stratagems = {}
         for department_stratagems in self.stratagems_by_department.values():
@@ -2014,6 +2029,22 @@ class StratagemApp(QMainWindow):
         self.search.installEventFilter(self)
         self.update_search_clear_visibility(self.search.text())
         side.addWidget(self.search)
+
+        self.icon_organize_label = QLabel("Organize")
+        self.icon_organize_label.setObjectName("sidebar_control_label")
+        side.addWidget(self.icon_organize_label)
+
+        self.icon_organize_box = QComboBox()
+        self.icon_organize_box.setObjectName("sidebar_organize_combo")
+        self.icon_organize_box.setToolTip("Choose how stratagem icons are grouped in the list")
+        self.icon_organize_box.addItem("By Warbond", "warbond")
+        self.icon_organize_box.addItem("By Stratagem Type", "type")
+        mode_index = self.icon_organize_box.findData(self.icon_organization_mode)
+        if mode_index < 0:
+            mode_index = 0
+        self.icon_organize_box.setCurrentIndex(mode_index)
+        self.icon_organize_box.currentIndexChanged.connect(self._on_icon_organization_changed)
+        side.addWidget(self.icon_organize_box)
         
         # Add collapse/expand all button
         self.toggle_all_btn = QPushButton("▼ Collapse All")
@@ -2104,7 +2135,8 @@ class StratagemApp(QMainWindow):
 
     def _populate_icon_list(self):
         """Populate the icon list with stratagems organized by department"""
-        for department, stratagems in self.stratagems_by_department.items():
+        grouped_stratagems = self._build_sidebar_groups()
+        for department, stratagems in grouped_stratagems.items():
             # Initialize expanded state for this department
             self.department_expanded_state[department] = True
             
@@ -2126,6 +2158,136 @@ class StratagemApp(QMainWindow):
                 self.icon_list.setItemWidget(item, w)
                 self.icon_widgets.append(w)
                 self.icon_items.append((item, w))
+
+    def _build_sidebar_groups(self):
+        """Return ordered stratagem groups for sidebar based on selected organization mode."""
+        if self.icon_organization_mode == "warbond":
+            return OrderedDict(
+                (department, stratagems)
+                for department, stratagems in self.stratagems_by_department.items()
+                if isinstance(stratagems, dict) and stratagems
+            )
+
+        grouped = OrderedDict()
+        type_order = [
+            "Support Weapons",
+            "Orbital Strikes",
+            "Eagle Strikes",
+            "Emplacements",
+            "Sentries",
+            "Backpacks",
+            "Vehicles",
+            "Mission Stratagems",
+            "Other",
+            "Unknown",
+        ]
+
+        for type_name in type_order:
+            grouped[type_name] = {}
+
+        for department, stratagems in self.stratagems_by_department.items():
+            if not isinstance(stratagems, dict):
+                continue
+            for name, sequence in stratagems.items():
+                normalized_type = self._classify_stratagem_game_type(name, department)
+
+                if normalized_type not in grouped:
+                    grouped[normalized_type] = {}
+
+                grouped[normalized_type][name] = sequence
+
+        return OrderedDict((group_name, values) for group_name, values in grouped.items() if values)
+
+    def _classify_stratagem_game_type(self, stratagem_name, department_name):
+        """Classify stratagem into in-game functional categories."""
+        name = str(stratagem_name or "").strip()
+        department = str(department_name or "").strip()
+        lowered = name.lower()
+
+        raw_type = self.stratagem_type_map.get(name)
+        if isinstance(raw_type, str) and raw_type.strip():
+            normalized = raw_type.strip().lower()
+            direct_map = {
+                "support weapons": "Support Weapons",
+                "support weapon": "Support Weapons",
+                "orbital strikes": "Orbital Strikes",
+                "orbital strike": "Orbital Strikes",
+                "eagle strikes": "Eagle Strikes",
+                "eagle strike": "Eagle Strikes",
+                "emplacements": "Emplacements",
+                "emplacement": "Emplacements",
+                "sentries": "Sentries",
+                "sentry": "Sentries",
+                "backpacks": "Backpacks",
+                "backpack": "Backpacks",
+                "vehicles": "Vehicles",
+                "vehicle": "Vehicles",
+                "mission stratagems": "Mission Stratagems",
+                "mission stratagem": "Mission Stratagems",
+                "mission specific": "Mission Stratagems",
+                "other": "Other",
+            }
+            mapped = direct_map.get(normalized)
+            if mapped:
+                return mapped
+
+        if department == "Mission Specific":
+            return "Mission Stratagems"
+
+        if lowered.startswith("eagle "):
+            return "Eagle Strikes"
+        if lowered.startswith("orbital "):
+            return "Orbital Strikes"
+        if "tesla tower" in lowered:
+            return "Emplacements"
+        if "sentry" in lowered:
+            return "Sentries"
+        if "exosuit" in lowered or "vehicle" in lowered or "bastion" in lowered:
+            return "Vehicles"
+        if "emplacement" in lowered or "battlement" in lowered:
+            return "Emplacements"
+        if "mine" in lowered:
+            return "Emplacements"
+        if "shield generator relay" in lowered:
+            return "Emplacements"
+        if "backpack" in lowered:
+            return "Backpacks"
+
+        backpack_tokens = [
+            "guard dog",
+            "rover",
+            "k-9",
+            "dog breath",
+            "jump pack",
+            "hover pack",
+            "warp pack",
+            "supply pack",
+            "portable hellbomb",
+            "shield generator pack",
+            "directional shield",
+            "hot dog",
+        ]
+        if any(token in lowered for token in backpack_tokens):
+            return "Backpacks"
+
+        if lowered in ("reinforce", "resupply", "sos beacon", "eagle rearm", "call in super destroyer"):
+            return "Mission Stratagems"
+
+        return "Support Weapons"
+
+    def _on_icon_organization_changed(self, _index):
+        """Handle sidebar icon organization mode changes."""
+        if not hasattr(self, "icon_organize_box"):
+            return
+
+        selected_mode = self._normalize_icon_organization_mode(self.icon_organize_box.currentData())
+        if selected_mode == self.icon_organization_mode:
+            return
+
+        self.icon_organization_mode = selected_mode
+        self.global_settings["icon_organization"] = selected_mode
+        self.save_global_settings()
+        self._rebuild_icon_sidebar()
 
     def _create_numpad_grid(self, content_layout):
         """Create the numpad grid layout"""

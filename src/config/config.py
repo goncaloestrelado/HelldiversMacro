@@ -289,6 +289,19 @@ QLineEdit#search_input {{
     color: {accent};
 }}
 
+QComboBox#sidebar_organize_combo {{
+    color: {accent};
+    border: 1px solid {accent};
+}}
+
+QComboBox#sidebar_organize_combo:hover {{
+    border: 1px solid {accent};
+}}
+
+QLabel#sidebar_control_label {{
+    color: {accent};
+}}
+
 QToolButton#search_clear_btn {{
     color: {accent};
     border: 1px solid {accent};

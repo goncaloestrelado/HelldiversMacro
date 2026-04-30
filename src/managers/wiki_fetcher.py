@@ -251,6 +251,7 @@ def fetch_and_cache(on_request_count=None):
 
     stratagems_by_department = {}
     icon_filename_map = {}
+    stratagem_type_map = {}
 
     for title, wikitext in wikitext_map.items():
         code = _parse_stratagem_code(wikitext)
@@ -267,6 +268,8 @@ def fetch_and_cache(on_request_count=None):
 
         if icon_fn:
             icon_filename_map[title] = icon_fn
+        if stratagem_type:
+            stratagem_type_map[title] = stratagem_type
 
     icons_dir = get_icons_dir()
     os.makedirs(icons_dir, exist_ok=True)
@@ -294,6 +297,7 @@ def fetch_and_cache(on_request_count=None):
         "latest_page_timestamp": _fetch_latest_category_timestamp() or "",
         "stratagems_by_department": stratagems_by_department,
         "icon_filename_map": downloaded_icons,
+        "stratagem_type_map": stratagem_type_map,
     }
 
     cache_dir = get_cache_dir()
@@ -309,17 +313,26 @@ def fetch_and_cache(on_request_count=None):
 
 
 def load_cache():
+    stratagems_by_department, icon_filename_map, _ = load_cache_with_metadata()
+    return stratagems_by_department, icon_filename_map
+
+
+def load_cache_with_metadata():
     path = get_data_file()
     if not os.path.exists(path):
-        return None, None
+        return None, None, {}
     try:
         with _cache_lock:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-        return data.get("stratagems_by_department"), data.get("icon_filename_map", {})
+        return (
+            data.get("stratagems_by_department"),
+            data.get("icon_filename_map", {}),
+            data.get("stratagem_type_map", {}),
+        )
     except Exception as e:
         print(f"[WikiFetcher] Cache load error: {e}")
-        return None, None
+        return None, None, {}
 
 
 def is_cache_stale():

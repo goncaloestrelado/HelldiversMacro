@@ -21,6 +21,7 @@ DEFAULT_SETTINGS = {
     "autoload_profile": False,
     "theme": "Dark (Default)",
     "custom_themes": {},
+    "icon_organization": "warbond",
 }
 
 NUMPAD_LAYOUT = [
