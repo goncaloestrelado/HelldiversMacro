@@ -9,6 +9,8 @@ exit /b %errorlevel%
 REM Build script for Helldivers 2 - Strat Commander
 REM This script builds the EXE with PyInstaller and creates an installer with Inno Setup
 
+cd /d "%~dp0"
+
 echo ============================================
 echo Helldivers 2 - Strat Commander - Build Script
 echo ============================================
@@ -112,7 +114,6 @@ if "%INNO_PATH%"=="" (
 
 REM Inno Setup was found, try to build installer
 echo Attempting to compile installer with Inno Setup...
-cd /d "C:\Users\Utilizador\Desktop\HelldiversMacrosProject\HelldiversMacro"
 "%INNO_PATH%" "installer\installer.iss"
 
 set "INSTALLER_EXE=dist\Helldivers2StratCommander-Setup-%APP_VERSION%.exe"

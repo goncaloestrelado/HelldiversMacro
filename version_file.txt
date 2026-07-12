@@ -20,7 +20,7 @@ VSVersionInfo(
         StringStruct(u'LegalCopyright', u''),
         StringStruct(u'OriginalFilename', u'Helldivers2StratCommander.exe'),
         StringStruct(u'ProductName', u'Helldivers 2 - Strat Commander'),
-        StringStruct(u'ProductVersion', u'0.4.3'])
+        StringStruct(u'ProductVersion', u'0.4.3')])
       ]),
     VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
   ]
