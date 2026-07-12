@@ -55,6 +55,7 @@ echo [Step 2/4] Building EXE with PyInstaller...
 echo This may take a few minutes...
 
 pyinstaller --noconfirm --onefile --windowed ^
+    --noupx ^
     --name "Helldivers2StratCommander" ^
     --add-data "assets;assets" ^
     --add-data "src/core/stratagem_data.py;." ^

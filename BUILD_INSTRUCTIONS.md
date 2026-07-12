@@ -28,6 +28,7 @@ This will:
 
 ```bash
 pyinstaller --noconfirm --onefile --windowed ^
+   --noupx ^
     --name "HelldiversNumpadMacros" ^
     --add-data "assets;assets" ^
     --add-data "src/core/stratagem_data.py;." ^
