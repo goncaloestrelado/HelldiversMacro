@@ -3145,7 +3145,14 @@ class StratagemApp(QMainWindow):
 
     def update_speed_label(self, value):
         """Update speed/latency label"""
-        self.speed_btn.setText(f"Latency: {value}ms")
+        try:
+            latency = int(value)
+        except (TypeError, ValueError):
+            latency = 20
+
+        latency = max(1, min(200, latency))
+        self.speed_btn.setText(f"Latency: {latency}ms")
+        self.global_settings["latency"] = latency
 
     def update_macro_toggle_ui(self):
         """Update macro toggle UI elements"""
@@ -3361,9 +3368,17 @@ class StratagemApp(QMainWindow):
         data = ProfileManager.load_profile(profile_name)
         
         if data:
+            default_speed = self.global_settings.get("latency", self.speed_slider.value())
+            try:
+                profile_speed = int(data.get("speed", default_speed))
+            except (TypeError, ValueError):
+                profile_speed = int(default_speed)
+            profile_speed = max(1, min(200, profile_speed))
+
             self.speed_slider.blockSignals(True)
-            self.speed_slider.setValue(data.get("speed", 20))
+            self.speed_slider.setValue(profile_speed)
             self.speed_slider.blockSignals(False)
+            self.update_speed_label(profile_speed)
             
             mappings = data.get("mappings", {})
             for code, strat in mappings.items():
@@ -3423,6 +3438,7 @@ class StratagemApp(QMainWindow):
             self.speed_slider.blockSignals(True)
             self.speed_slider.setValue(20)
             self.speed_slider.blockSignals(False)
+            self.update_speed_label(20)
         else:
             # Restore to saved state
             for slot in self.slots.values():
@@ -3432,6 +3448,7 @@ class StratagemApp(QMainWindow):
             self.speed_slider.blockSignals(True)
             self.speed_slider.setValue(speed)
             self.speed_slider.blockSignals(False)
+            self.update_speed_label(speed)
             for code, strat in mappings.items():
                 if code in self.slots:
                     self.slots[code].assign(strat)
