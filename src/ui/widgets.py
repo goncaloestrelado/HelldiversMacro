@@ -128,12 +128,18 @@ class DraggableIcon(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(5, 5, 5, 5)
         
-        self.svg_view = QSvgWidget()
         path = find_svg_path(name)
         if path:
+            self.svg_view = QSvgWidget()
             self.svg_view.load(path)
-        
-        layout.addWidget(self.svg_view)
+            layout.addWidget(self.svg_view)
+        else:
+            self.svg_view = None
+            fallback_label = QLabel(name)
+            fallback_label.setWordWrap(True)
+            fallback_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            fallback_label.setStyleSheet("color: #ffe800; font-size: 10px; font-weight: bold; padding: 2px;")
+            layout.addWidget(fallback_label)
         self.setToolTip(name)
 
     def mousePressEvent(self, event):
@@ -278,6 +284,7 @@ class NumpadSlot(QWidget):
             return
         self.assigned_stratagem = None
         self.svg_display.hide()
+        self.label.setText(self.label_text)
         self.label.show()
         self.update_style(False)
         self.parent_app.on_change()
@@ -292,6 +299,11 @@ class NumpadSlot(QWidget):
             self.label.hide()
             self.svg_display.load(path)
             self.svg_display.show()
+            self.update_style(True)
+        else:
+            self.svg_display.hide()
+            self.label.setText(strat_name)
+            self.label.show()
             self.update_style(True)
         self.parent_app.on_change()
 

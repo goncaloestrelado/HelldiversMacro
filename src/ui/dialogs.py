@@ -1113,19 +1113,24 @@ class SettingsWindow(QDialog):
         )
 
     def _on_wiki_refresh_error(self, error_msg):
-        self._wiki_status_label.setText("Update failed. Check your connection.")
+        self._wiki_status_label.setText("Update failed. Check connection or wiki status.")
         self._wiki_refresh_btn.setText("Update Now")
         self._wiki_refresh_btn.setEnabled(True)
         self._wiki_clear_cache_btn.setEnabled(True)
         if self.parent_app and hasattr(self.parent_app, "_set_sidebar_loading"):
             self.parent_app._set_sidebar_loading(False)
+        msg = (
+            f"Could not update stratagems from wiki:\n{error_msg}\n\n"
+            "Existing cached/default stratagems were preserved."
+        )
+        QMessageBox.warning(self, "Wiki Update Failed", msg)
 
     def _clear_wiki_cache(self):
         from ..managers import wiki_fetcher
         reply = QMessageBox.question(
             self,
             "Clear Wiki Cache",
-            "Clear cached wiki stratagem data and icons?",
+            "Clear cached wiki stratagem data and icons?\n\nDefault bundled stratagems will be restored immediately.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -1135,7 +1140,7 @@ class SettingsWindow(QDialog):
         ok = wiki_fetcher.clear_cache()
         if ok:
             self.wiki_cache_cleared = True
-            self._wiki_status_label.setText("Cache cleared. Data will refetch on return to main view.")
+            self._wiki_status_label.setText("Cache cleared. Default stratagems restored.")
             request_limit = wiki_fetcher.get_request_limit_per_fetch()
             self._wiki_request_label.setText(f"App requests this fetch: 0 / {request_limit}")
             if self.parent_app:
@@ -1144,8 +1149,8 @@ class SettingsWindow(QDialog):
                 if hasattr(self.parent_app, "_rebuild_icon_sidebar"):
                     self.parent_app._rebuild_icon_sidebar()
                 if hasattr(self.parent_app, "show_status"):
-                    self.parent_app.show_status("Wiki cache cleared", 1800)
-            QMessageBox.information(self, "Wiki Cache", "Wiki cache cleared.")
+                    self.parent_app.show_status("Wiki cache cleared - defaults restored", 1800)
+            QMessageBox.information(self, "Wiki Cache", "Wiki cache cleared. Default stratagems restored.")
         else:
             QMessageBox.warning(self, "Wiki Cache", "Failed to clear wiki cache.")
 

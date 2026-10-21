@@ -1,0 +1,1138 @@
+{
+  "timestamp": 1788378351.2640994,
+  "latest_page_timestamp": "2026-09-02T15:20:05Z",
+  "stratagems_by_department": {
+    "Castellan's Creed": {
+      "40-K Meltagun": [
+        "down",
+        "left",
+        "up",
+        "left",
+        "left",
+        "down"
+      ]
+    },
+    "Robotics Workshop": {
+      "A/AC-8 Autocannon Sentry": [
+        "down",
+        "up",
+        "right",
+        "up",
+        "left",
+        "up"
+      ],
+      "A/G-16 Gatling Sentry": [
+        "down",
+        "up",
+        "right",
+        "left"
+      ],
+      "A/M-12 Mortar Sentry": [
+        "down",
+        "up",
+        "right",
+        "right",
+        "down"
+      ],
+      "A/M-23 EMS Mortar Sentry": [
+        "down",
+        "up",
+        "right",
+        "down",
+        "right"
+      ],
+      "A/MG-43 Machine Gun Sentry": [
+        "down",
+        "up",
+        "right",
+        "right",
+        "up"
+      ],
+      "A/MLS-4X Rocket Sentry": [
+        "down",
+        "up",
+        "right",
+        "right",
+        "left"
+      ],
+      "EXO-45 Patriot Exosuit": [
+        "left",
+        "down",
+        "right",
+        "up",
+        "left",
+        "down",
+        "down"
+      ],
+      "EXO-49 Emancipator Exosuit": [
+        "left",
+        "down",
+        "right",
+        "up",
+        "left",
+        "down",
+        "up"
+      ]
+    },
+    "Bridge": {
+      "A/ARC-3 Tesla Tower": [
+        "down",
+        "up",
+        "right",
+        "up",
+        "left",
+        "right"
+      ],
+      "E/GL-21 Grenadier Battlement": [
+        "down",
+        "right",
+        "down",
+        "left",
+        "right"
+      ],
+      "E/MG-101 HMG Emplacement": [
+        "down",
+        "up",
+        "left",
+        "right",
+        "right",
+        "left"
+      ],
+      "FX-12 Shield Generator Relay": [
+        "down",
+        "down",
+        "left",
+        "right",
+        "left",
+        "right"
+      ],
+      "Orbital EMS Strike": [
+        "right",
+        "right",
+        "left",
+        "down"
+      ],
+      "Orbital Gas Strike": [
+        "right",
+        "right",
+        "down",
+        "right"
+      ],
+      "Orbital Precision Strike": [
+        "right",
+        "right",
+        "up"
+      ],
+      "Orbital Smoke Strike": [
+        "right",
+        "right",
+        "down",
+        "up"
+      ]
+    },
+    "Urban Legends": {
+      "A/FLAM-40 Flame Sentry": [
+        "down",
+        "up",
+        "right",
+        "down",
+        "up",
+        "up"
+      ],
+      "E/AT-12 Anti-Tank Emplacement": [
+        "down",
+        "up",
+        "left",
+        "right",
+        "right",
+        "right"
+      ],
+      "SH-51 Directional Shield": [
+        "down",
+        "up",
+        "left",
+        "right",
+        "up",
+        "up"
+      ]
+    },
+    "Entrenched Division": {
+      "A/GM-17 Gas Mortar Sentry": [
+        "down",
+        "up",
+        "right",
+        "down",
+        "left"
+      ],
+      "B/FLAM-80 Cremator": [
+        "down",
+        "down",
+        "right",
+        "down",
+        "up",
+        "up"
+      ]
+    },
+    "Control Group": {
+      "A/LAS-98 Laser Sentry": [
+        "down",
+        "up",
+        "right",
+        "down",
+        "up",
+        "right"
+      ],
+      "LIFT-182 Warp Pack": [
+        "down",
+        "left",
+        "right",
+        "down",
+        "left",
+        "right"
+      ],
+      "PLAS-45 Epoch": [
+        "down",
+        "left",
+        "up",
+        "left",
+        "right"
+      ]
+    },
+    "Patriotic Administration Center": {
+      "AC-8 Autocannon": [
+        "down",
+        "left",
+        "down",
+        "up",
+        "up",
+        "right"
+      ],
+      "APW-1 Anti-Materiel Rifle": [
+        "down",
+        "left",
+        "right",
+        "up",
+        "down"
+      ],
+      "EAT-17 Expendable Anti-Tank": [
+        "down",
+        "down",
+        "left",
+        "up",
+        "right"
+      ],
+      "FAF-14 Spear": [
+        "down",
+        "down",
+        "up",
+        "down",
+        "down"
+      ],
+      "FLAM-40 Flamethrower": [
+        "down",
+        "left",
+        "up",
+        "down",
+        "up"
+      ],
+      "GR-8 Recoilless Rifle": [
+        "down",
+        "left",
+        "right",
+        "right",
+        "left"
+      ],
+      "M-105 Stalwart": [
+        "down",
+        "left",
+        "down",
+        "up",
+        "up",
+        "left"
+      ],
+      "MG-206 Heavy Machine Gun": [
+        "down",
+        "left",
+        "up",
+        "down",
+        "down"
+      ],
+      "MG-43 Machine Gun": [
+        "down",
+        "left",
+        "down",
+        "up",
+        "right"
+      ],
+      "MLS-4X Commando": [
+        "down",
+        "left",
+        "up",
+        "down",
+        "right"
+      ],
+      "RL-77 Airburst Rocket Launcher": [
+        "down",
+        "up",
+        "up",
+        "left",
+        "right"
+      ],
+      "RS-422 Railgun": [
+        "down",
+        "right",
+        "down",
+        "up",
+        "left",
+        "right"
+      ],
+      "StA-X3 W.A.S.P. Launcher": [
+        "down",
+        "down",
+        "up",
+        "down",
+        "right"
+      ]
+    },
+    "Engineering Bay": {
+      "ARC-3 Arc Thrower": [
+        "down",
+        "right",
+        "down",
+        "up",
+        "left",
+        "left"
+      ],
+      "AX/AR-23 Guard Dog": [
+        "down",
+        "up",
+        "left",
+        "up",
+        "right",
+        "down"
+      ],
+      "AX/LAS-5 Rover": [
+        "down",
+        "up",
+        "left",
+        "up",
+        "right",
+        "right"
+      ],
+      "B-1 Supply Pack": [
+        "down",
+        "left",
+        "down",
+        "up",
+        "up",
+        "down"
+      ],
+      "GL-21 Grenade Launcher": [
+        "down",
+        "left",
+        "up",
+        "left",
+        "down"
+      ],
+      "LAS-98 Laser Cannon": [
+        "down",
+        "left",
+        "down",
+        "up",
+        "left"
+      ],
+      "LAS-99 Quasar Cannon": [
+        "down",
+        "down",
+        "up",
+        "left",
+        "right"
+      ],
+      "MD-17 Anti-Tank Mines": [
+        "down",
+        "left",
+        "up",
+        "up"
+      ],
+      "MD-6 Anti-Personnel Minefield": [
+        "down",
+        "left",
+        "up",
+        "right"
+      ],
+      "MD-8 Gas Mines": [
+        "down",
+        "left",
+        "left",
+        "right"
+      ],
+      "MD-I4 Incendiary Mines": [
+        "down",
+        "left",
+        "left",
+        "down"
+      ],
+      "SH-20 Ballistic Shield Backpack": [
+        "down",
+        "left",
+        "down",
+        "down",
+        "up",
+        "left"
+      ],
+      "SH-32 Shield Generator Pack": [
+        "down",
+        "up",
+        "left",
+        "right",
+        "left",
+        "right"
+      ]
+    },
+    "Force of Law": {
+      "AX/ARC-3 K-9": [
+        "down",
+        "up",
+        "left",
+        "up",
+        "right",
+        "left"
+      ],
+      "GL-52 De-Escalator": [
+        "down",
+        "right",
+        "up",
+        "left",
+        "right"
+      ]
+    },
+    "Python Commandos": {
+      "AX/FLAM-75 Hot Dog": [
+        "down",
+        "up",
+        "left",
+        "up",
+        "left",
+        "left"
+      ],
+      "CQC-9 Defoliation Tool": [
+        "down",
+        "left",
+        "right",
+        "right",
+        "down"
+      ],
+      "M-1000 Maxigun": [
+        "down",
+        "left",
+        "right",
+        "down",
+        "up",
+        "up"
+      ]
+    },
+    "Chemical Agents": {
+      "AX/TX-13 Dog Breath": [
+        "down",
+        "up",
+        "left",
+        "up",
+        "right",
+        "up"
+      ],
+      "TX-41 Sterilizer": [
+        "down",
+        "left",
+        "up",
+        "down",
+        "left"
+      ]
+    },
+    "Servants of Freedom": {
+      "B-100 Portable Hellbomb": [
+        "down",
+        "right",
+        "up",
+        "up",
+        "up"
+      ]
+    },
+    "Redacted Regiment": {
+      "B/MD C4 Pack": [
+        "down",
+        "right",
+        "up",
+        "up",
+        "right",
+        "up"
+      ]
+    },
+    "Mission Specific": {
+      "Cargo Container": [
+        "up",
+        "up",
+        "down",
+        "down",
+        "right",
+        "down"
+      ],
+      "Rapid Acquisition": [
+        "up",
+        "up",
+        "down",
+        "down",
+        "right",
+        "down"
+      ],
+      "Seize Industrial Complex": [
+        "down",
+        "down",
+        "down",
+        "down",
+        "down",
+        "up",
+        "up"
+      ],
+      "Spread Democracy": [
+        "down",
+        "up",
+        "down",
+        "up"
+      ],
+      "Activate E-711 Extraction Drill": [
+        "down",
+        "down",
+        "left",
+        "left",
+        "down",
+        "down"
+      ],
+      "Aquifer Drill": [
+        "left",
+        "left",
+        "left",
+        "up",
+        "down",
+        "right",
+        "down",
+        "down"
+      ],
+      "Call In Super Destroyer": [
+        "up",
+        "up",
+        "down",
+        "down",
+        "left",
+        "right",
+        "left",
+        "right"
+      ],
+      "Dark Fluid Vessel": [
+        "up",
+        "left",
+        "right",
+        "down",
+        "up",
+        "up"
+      ],
+      "Eagle Rearm": [
+        "up",
+        "up",
+        "left",
+        "up",
+        "right"
+      ],
+      "Hive Breaker Drill": [
+        "left",
+        "up",
+        "down",
+        "right",
+        "down",
+        "down"
+      ],
+      "NUX-223 Hellbomb": [
+        "down",
+        "up",
+        "left",
+        "down",
+        "up",
+        "right",
+        "down",
+        "up"
+      ],
+      "Orbital Illumination Flare": [
+        "right",
+        "right",
+        "left",
+        "left"
+      ],
+      "Portable Comms Relay": [
+        "up",
+        "up",
+        "down",
+        "down",
+        "left",
+        "left",
+        "down"
+      ],
+      "Prospecting Drill": [
+        "down",
+        "down",
+        "left",
+        "right",
+        "down",
+        "down"
+      ],
+      "Reinforce": [
+        "up",
+        "down",
+        "right",
+        "left",
+        "up"
+      ],
+      "Resupply": [
+        "down",
+        "down",
+        "up",
+        "right"
+      ],
+      "SEAF Artillery": [
+        "right",
+        "up",
+        "up",
+        "down"
+      ],
+      "Seismic Probe": [
+        "up",
+        "up",
+        "left",
+        "right",
+        "down",
+        "down"
+      ],
+      "SoS Beacon": [
+        "up",
+        "down",
+        "right",
+        "up"
+      ],
+      "SSSD Delivery": [
+        "down",
+        "down",
+        "down",
+        "down",
+        "down",
+        "up",
+        "up"
+      ],
+      "Super Earth Flag": [
+        "down",
+        "up",
+        "down",
+        "up"
+      ],
+      "Tactical Video Camera": [
+        "right",
+        "down",
+        "down",
+        "up",
+        "left",
+        "left",
+        "up"
+      ],
+      "Tectonic Drill": [
+        "up",
+        "down",
+        "up",
+        "down",
+        "up",
+        "down"
+      ],
+      "Upload Data": [
+        "left",
+        "right",
+        "up",
+        "up",
+        "up"
+      ]
+    },
+    "Masters of Ceremony": {
+      "CQC-1 One True Flag": [
+        "down",
+        "left",
+        "right",
+        "right",
+        "up"
+      ]
+    },
+    "Siege Breakers": {
+      "CQC-20 Breaching Hammer": [
+        "down",
+        "left",
+        "right",
+        "left",
+        "up"
+      ],
+      "EAT-411 Leveller": [
+        "down",
+        "down",
+        "left",
+        "up",
+        "down"
+      ],
+      "GL-28 Belt-Fed Grenade Launcher": [
+        "down",
+        "left",
+        "up",
+        "left",
+        "up",
+        "up"
+      ]
+    },
+    "Hangar": {
+      "Eagle 110mm Rocket Pods": [
+        "up",
+        "right",
+        "up",
+        "left"
+      ],
+      "Eagle 500kg Bomb": [
+        "up",
+        "right",
+        "down",
+        "down",
+        "down"
+      ],
+      "Eagle Airstrike": [
+        "up",
+        "right",
+        "down",
+        "right"
+      ],
+      "Eagle Cluster Bomb": [
+        "up",
+        "right",
+        "down",
+        "down",
+        "right"
+      ],
+      "Eagle Napalm Airstrike": [
+        "up",
+        "right",
+        "down",
+        "up"
+      ],
+      "Eagle Smoke Strike": [
+        "up",
+        "right",
+        "up",
+        "down"
+      ],
+      "Eagle Strafing Run": [
+        "up",
+        "right",
+        "right"
+      ],
+      "LIFT-850 Jump Pack": [
+        "down",
+        "up",
+        "up",
+        "down",
+        "up"
+      ],
+      "M-102 Gunner FRV": [
+        "left",
+        "down",
+        "right",
+        "down",
+        "right",
+        "down",
+        "up"
+      ],
+      "M-104 Incinerator FRV": [
+        "left",
+        "down",
+        "right",
+        "left",
+        "down",
+        "up",
+        "up"
+      ],
+      "TD-220 Bastion MK XVI": [
+        "left",
+        "down",
+        "right",
+        "down",
+        "left",
+        "down",
+        "up",
+        "down",
+        "up"
+      ]
+    },
+    "Dust Devils": {
+      "EAT-700 Expendable Napalm": [
+        "down",
+        "down",
+        "left",
+        "up",
+        "left"
+      ],
+      "MS-11 Solo Silo": [
+        "down",
+        "up",
+        "right",
+        "down",
+        "down"
+      ],
+      "S-11 Speargun": [
+        "down",
+        "right",
+        "down",
+        "left",
+        "up",
+        "right"
+      ]
+    },
+    "Exo Experts": {
+      "EXO-51 Lumberer Exosuit": [
+        "left",
+        "down",
+        "right",
+        "up",
+        "right",
+        "left",
+        "up"
+      ],
+      "EXO-55 Breakthrough Exosuit": [
+        "left",
+        "down",
+        "right",
+        "left",
+        "right",
+        "down",
+        "up"
+      ],
+      "MGX-42 Bullet Storm": [
+        "down",
+        "left",
+        "down",
+        "right",
+        "up",
+        "left"
+      ]
+    },
+    "Borderline Justice": {
+      "LIFT-860 Hover Pack": [
+        "down",
+        "up",
+        "up",
+        "down",
+        "left",
+        "right"
+      ]
+    },
+    "Census Thunder": {
+      "M-103 Supply FRV": [
+        "left",
+        "down",
+        "left",
+        "left",
+        "down",
+        "up",
+        "right"
+      ]
+    },
+    "Orbital Cannons": {
+      "Orbital 120mm HE Barrage": [
+        "right",
+        "right",
+        "down",
+        "left",
+        "right",
+        "down"
+      ],
+      "Orbital 380mm HE Barrage": [
+        "right",
+        "down",
+        "up",
+        "up",
+        "left",
+        "down",
+        "down"
+      ],
+      "Orbital Airburst Strike": [
+        "right",
+        "right",
+        "right"
+      ],
+      "Orbital Gatling Barrage": [
+        "right",
+        "down",
+        "left",
+        "up",
+        "up"
+      ],
+      "Orbital Laser": [
+        "right",
+        "down",
+        "up",
+        "right",
+        "down"
+      ],
+      "Orbital Napalm Barrage": [
+        "right",
+        "right",
+        "down",
+        "left",
+        "right",
+        "up"
+      ],
+      "Orbital Railcannon Strike": [
+        "right",
+        "up",
+        "down",
+        "down",
+        "right"
+      ],
+      "Orbital Walking Barrage": [
+        "right",
+        "down",
+        "right",
+        "down",
+        "right",
+        "down"
+      ]
+    }
+  },
+  "icon_filename_map": {
+    "40-K Meltagun": "Meltagun_Stratagem_Icon_Background.svg",
+    "A/AC-8 Autocannon Sentry": "Autocannon_Sentry_Stratagem_Icon_Background.svg",
+    "A/ARC-3 Tesla Tower": "Tesla_Tower_Stratagem_Icon_Background.svg",
+    "A/FLAM-40 Flame Sentry": "Flame_Sentry_Stratagem_Icon_Background.svg",
+    "A/G-16 Gatling Sentry": "Gatling_Sentry_Stratagem_Icon_Background.svg",
+    "A/GM-17 Gas Mortar Sentry": "Gas_Mortar_Sentry_Stratagem_Icon_Background.svg",
+    "A/LAS-98 Laser Sentry": "Laser_Sentry_Stratagem_Icon_Background.svg",
+    "A/M-12 Mortar Sentry": "Mortar_Sentry_Stratagem_Icon_Background.svg",
+    "A/M-23 EMS Mortar Sentry": "EMS_Mortar_Sentry_Stratagem_Icon_Background.svg",
+    "A/MG-43 Machine Gun Sentry": "Machine_Gun_Sentry_Stratagem_Icon_Background.svg",
+    "A/MLS-4X Rocket Sentry": "Rocket_Sentry_Stratagem_Icon_Background.svg",
+    "AC-8 Autocannon": "Autocannon_Stratagem_Icon_Background.svg",
+    "Community:Aprilfools/2026/FSF-14 Sprar": "Sprar_Stratagem_Icon.svg",
+    "APW-1 Anti-Materiel Rifle": "Anti-Materiel_Rifle_Stratagem_Icon_Background.svg",
+    "ARC-3 Arc Thrower": "Arc_Thrower_Stratagem_Icon_Background.svg",
+    "AX/AR-23 Guard Dog": "Guard_Dog_Stratagem_Icon_Background.svg",
+    "AX/ARC-3 K-9": "K-9_Stratagem_Icon_Background.svg",
+    "AX/FLAM-75 Hot Dog": "Hot_Dog_Stratagem_Icon_Background.svg",
+    "AX/LAS-5 Rover": "Rover_Stratagem_Icon_Background.svg",
+    "AX/TX-13 Dog Breath": "Dog_Breath_Stratagem_Icon_Background.svg",
+    "B-1 Supply Pack": "Supply_Pack_Stratagem_Icon_Background.svg",
+    "B-100 Portable Hellbomb": "Portable_Hellbomb_Stratagem_Icon_Background.svg",
+    "B/FLAM-80 Cremator": "Cremator_Stratagem_Icon_Background.svg",
+    "B/MD C4 Pack": "C4_Pack_Stratagem_Icon_Background.svg",
+    "Cargo Container": "Cargo_Container_Stratagem_Icon_Background.svg",
+    "CQC-1 One True Flag": "One_True_Flag_Stratagem_Icon_Background.svg",
+    "CQC-20 Breaching Hammer": "Breaching_Hammer_Stratagem_Icon_Background.svg",
+    "CQC-9 Defoliation Tool": "Defoliation_Tool_Stratagem_Icon_Background.svg",
+    "E/AT-12 Anti-Tank Emplacement": "Anti-Tank_Emplacement_Stratagem_Icon_Background.svg",
+    "E/GL-21 Grenadier Battlement": "Grenadier_Battlement_Stratagem_Icon_Background.svg",
+    "E/MG-101 HMG Emplacement": "HMG_Emplacement_Stratagem_Icon_Background.svg",
+    "Eagle 110mm Rocket Pods": "Eagle_110mm_Rocket_Pods_Stratagem_Icon_Background.svg",
+    "Eagle 500kg Bomb": "Eagle_500kg_Bomb_Stratagem_Icon_Background.svg",
+    "Eagle Airstrike": "Eagle_Airstrike_Stratagem_Icon_Background.svg",
+    "Eagle Cluster Bomb": "Eagle_Cluster_Bomb_Stratagem_Icon_Background.svg",
+    "Eagle Napalm Airstrike": "Eagle_Napalm_Airstrike_Stratagem_Icon_Background.svg",
+    "Eagle Smoke Strike": "Eagle_Smoke_Strike_Stratagem_Icon_Background.svg",
+    "Eagle Strafing Run": "Eagle_Strafing_Run_Stratagem_Icon_Background.svg",
+    "EAT-17 Expendable Anti-Tank": "Expendable_Anti-Tank_Stratagem_Icon_Background.svg",
+    "EAT-411 Leveller": "Leveller_Stratagem_Icon_Background.svg",
+    "EAT-700 Expendable Napalm": "Expendable_Napalm_Stratagem_Icon_Background.svg",
+    "EXO-45 Patriot Exosuit": "Patriot_Exosuit_Stratagem_Icon_Background.svg",
+    "EXO-49 Emancipator Exosuit": "Emancipator_Exosuit_Stratagem_Icon_Background.svg",
+    "EXO-51 Lumberer Exosuit": "Lumberer_Exosuit_Stratagem_Icon_Background.svg",
+    "EXO-55 Breakthrough Exosuit": "Breakthrough_Exosuit_Stratagem_Icon_Background.svg",
+    "FAF-14 Spear": "Spear_Stratagem_Icon_Background.svg",
+    "FLAM-40 Flamethrower": "Flamethrower_Stratagem_Icon_Background.svg",
+    "FX-12 Shield Generator Relay": "Shield_Generator_Relay_Stratagem_Icon_Background.svg",
+    "GL-21 Grenade Launcher": "Grenade_Launcher_Stratagem_Icon_Background.svg",
+    "GL-28 Belt-Fed Grenade Launcher": "Belt-Fed_Grenade_Launcher_Stratagem_Icon_Background.svg",
+    "GL-52 De-Escalator": "De-Escalator_Stratagem_Icon_Background.svg",
+    "GR-8 Recoilless Rifle": "Recoilless_Rifle_Stratagem_Icon_Background.svg",
+    "LAS-98 Laser Cannon": "Laser_Cannon_Stratagem_Icon_Background.svg",
+    "LAS-99 Quasar Cannon": "Quasar_Cannon_Stratagem_Icon_Background.svg",
+    "LIFT-182 Warp Pack": "Warp_Pack_Stratagem_Icon_Background.svg",
+    "LIFT-850 Jump Pack": "Jump_Pack_Stratagem_Icon_Background.svg",
+    "LIFT-860 Hover Pack": "Hover_Pack_Stratagem_Icon_Background.svg",
+    "M-1000 Maxigun": "Maxigun_Stratagem_Icon_Background.svg",
+    "M-102 Gunner FRV": "Fast_Recon_Vehicle_Stratagem_Icon_Background.svg",
+    "M-103 Supply FRV": "Supply_FRV_Stratagem_Icon_Background.svg",
+    "M-104 Incinerator FRV": "Incinerator_FRV_Stratagem_Icon_Background.svg",
+    "M-105 Stalwart": "Stalwart_Stratagem_Icon_Background.svg",
+    "MD-17 Anti-Tank Mines": "Anti-Tank_Mines_Stratagem_Icon_Background.svg",
+    "MD-6 Anti-Personnel Minefield": "Anti-Personnel_Minefield_Stratagem_Icon_Background.svg",
+    "MD-8 Gas Mines": "Gas_Mines_Stratagem_Icon_Background.svg",
+    "MD-I4 Incendiary Mines": "Incendiary_Mines_Stratagem_Icon_Background.svg",
+    "MG-206 Heavy Machine Gun": "Heavy_Machine_Gun_Stratagem_Icon_Background.svg",
+    "MG-43 Machine Gun": "Machine_Gun_Stratagem_Icon_Background.svg",
+    "MGX-42 Bullet Storm": "Bullet_Storm_Stratagem_Icon_Background.svg",
+    "MLS-4X Commando": "Commando_Stratagem_Icon_Background.svg",
+    "MS-11 Solo Silo": "Solo_Silo_Stratagem_Icon_Background.svg",
+    "Orbital 120mm HE Barrage": "Orbital_120mm_HE_Barrage_Stratagem_Icon_Background.svg",
+    "Orbital 380mm HE Barrage": "Orbital_380mm_HE_Barrage_Stratagem_Icon_Background.svg",
+    "Orbital Airburst Strike": "Orbital_Airburst_Strike_Stratagem_Icon_Background.svg",
+    "Orbital EMS Strike": "Orbital_EMS_Strike_Stratagem_Icon_Background.svg",
+    "Orbital Gas Strike": "Orbital_Gas_Strike_Stratagem_Icon_Background.svg",
+    "Orbital Gatling Barrage": "Orbital_Gatling_Barrage_Stratagem_Icon_Background.svg",
+    "Orbital Laser": "Orbital_Laser_Stratagem_Icon_Background.svg",
+    "Orbital Napalm Barrage": "Orbital_Napalm_Barrage_Stratagem_Icon_Background.svg",
+    "Orbital Precision Strike": "Orbital_Precision_Strike_Stratagem_Icon_Background.svg",
+    "Orbital Railcannon Strike": "Orbital_Railcannon_Strike_Stratagem_Icon_Background.svg",
+    "Orbital Smoke Strike": "Orbital_Smoke_Strike_Stratagem_Icon_Background.svg",
+    "Orbital Walking Barrage": "Orbital_Walking_Barrage_Stratagem_Icon_Background.svg",
+    "PLAS-45 Epoch": "Epoch_Stratagem_Icon_Background.svg",
+    "Rapid Acquisition": "Cargo_Container_Stratagem_Icon_Background.svg",
+    "RL-77 Airburst Rocket Launcher": "Airburst_Rocket_Launcher_Stratagem_Icon_Background.svg",
+    "RS-422 Railgun": "Railgun_Stratagem_Icon_Background.svg",
+    "S-11 Speargun": "Speargun_Stratagem_Icon_Background.svg",
+    "Seize Industrial Complex": "Upload_Data_Stratagem_Icon_Background.svg",
+    "SH-20 Ballistic Shield Backpack": "Ballistic_Shield_Backpack_Stratagem_Icon_Background.svg",
+    "SH-32 Shield Generator Pack": "Shield_Generator_Pack_Stratagem_Icon_Background.svg",
+    "SH-51 Directional Shield": "Directional_Shield_Stratagem_Icon_Background.svg",
+    "Spread Democracy": "Super_Earth_Flag_Stratagem_Icon_Background.svg",
+    "StA-X3 W.A.S.P. Launcher": "W.A.S.P._Launcher_Stratagem_Icon_Background.svg",
+    "TD-220 Bastion MK XVI": "Bastion_MK_XVI_Stratagem_Icon_Background.svg",
+    "TX-41 Sterilizer": "Sterilizer_Stratagem_Icon_Background.svg",
+    "Activate E-711 Extraction Drill": "Drill_Stratagem_Icon_Background.svg",
+    "Aquifer Drill": "Drill_Stratagem_Icon_Background.svg",
+    "Call In Super Destroyer": "Call_In_Super_Destroyer_Stratagem_Icon_Background.svg",
+    "Eagle Rearm": "Eagle_Rearm_Stratagem_Icon_Background.svg",
+    "Hive Breaker Drill": "Drill_Stratagem_Icon_Background.svg",
+    "NUX-223 Hellbomb": "Hellbomb_Stratagem_Icon_Background.svg",
+    "Orbital Illumination Flare": "Orbital_Illumination_Flare_Stratagem_Icon_Background.svg",
+    "Portable Comms Relay": "Cargo_Container_Stratagem_Icon_Background.svg",
+    "Prospecting Drill": "Drill_Stratagem_Icon_Background.svg",
+    "Reinforce": "Reinforce_Stratagem_Icon_Background.svg",
+    "Resupply": "Resupply_Stratagem_Icon_Background.svg",
+    "SEAF Artillery": "SEAF_Artillery_Stratagem_Icon_Background.svg",
+    "Seismic Probe": "Seismic_Probe_Stratagem_Icon_Background.svg",
+    "SoS Beacon": "SOS_Beacon_Stratagem_Icon_Background.svg",
+    "SSSD Delivery": "Upload_Data_Stratagem_Icon_Background.svg",
+    "Super Earth Flag": "Super_Earth_Flag_Stratagem_Icon_Background.svg",
+    "Tectonic Drill": "Drill_Stratagem_Icon_Background.svg",
+    "Upload Data": "Upload_Data_Stratagem_Icon_Background.svg"
+  },
+  "stratagem_type_map": {
+    "40-K Meltagun": "Support Weapon",
+    "A/AC-8 Autocannon Sentry": "Sentry",
+    "A/ARC-3 Tesla Tower": "Sentry",
+    "A/FLAM-40 Flame Sentry": "Sentry",
+    "A/G-16 Gatling Sentry": "Sentry",
+    "A/GM-17 Gas Mortar Sentry": "Sentry",
+    "A/LAS-98 Laser Sentry": "Sentry",
+    "A/M-12 Mortar Sentry": "Sentry",
+    "A/M-23 EMS Mortar Sentry": "Sentry",
+    "A/MG-43 Machine Gun Sentry": "Sentry",
+    "A/MLS-4X Rocket Sentry": "Sentry",
+    "AC-8 Autocannon": "Support Weapon",
+    "APW-1 Anti-Materiel Rifle": "Support Weapon",
+    "ARC-3 Arc Thrower": "Support Weapon",
+    "AX/AR-23 Guard Dog": "Backpack",
+    "AX/ARC-3 K-9": "Backpack",
+    "AX/FLAM-75 Hot Dog": "Backpack",
+    "AX/LAS-5 Rover": "Backpack",
+    "AX/TX-13 Dog Breath": "Backpack",
+    "B-1 Supply Pack": "Backpack",
+    "B-100 Portable Hellbomb": "Backpack",
+    "B/FLAM-80 Cremator": "Support Weapon",
+    "B/MD C4 Pack": "Support Weapon",
+    "Cargo Container": "Objective",
+    "CQC-1 One True Flag": "Support Weapon",
+    "CQC-20 Breaching Hammer": "Support Weapon",
+    "CQC-9 Defoliation Tool": "Support Weapon",
+    "E/AT-12 Anti-Tank Emplacement": "Emplacement",
+    "E/GL-21 Grenadier Battlement": "Emplacement",
+    "E/MG-101 HMG Emplacement": "Emplacement",
+    "Eagle 110mm Rocket Pods": "Eagle",
+    "Eagle 500kg Bomb": "Eagle",
+    "Eagle Airstrike": "Eagle",
+    "Eagle Cluster Bomb": "Eagle",
+    "Eagle Napalm Airstrike": "Eagle",
+    "Eagle Smoke Strike": "Eagle",
+    "Eagle Strafing Run": "Eagle",
+    "EAT-17 Expendable Anti-Tank": "Support Weapon",
+    "EAT-411 Leveller": "Support Weapon",
+    "EAT-700 Expendable Napalm": "Support Weapon",
+    "EXO-45 Patriot Exosuit": "Vehicle",
+    "EXO-49 Emancipator Exosuit": "Vehicle",
+    "EXO-51 Lumberer Exosuit": "Vehicle",
+    "EXO-55 Breakthrough Exosuit": "Vehicle",
+    "FAF-14 Spear": "Support Weapon",
+    "FLAM-40 Flamethrower": "Support Weapon",
+    "FX-12 Shield Generator Relay": "Emplacement",
+    "GL-21 Grenade Launcher": "Support Weapon",
+    "GL-28 Belt-Fed Grenade Launcher": "Support Weapon",
+    "GL-52 De-Escalator": "Support Weapon",
+    "GR-8 Recoilless Rifle": "Support Weapon",
+    "LAS-98 Laser Cannon": "Support Weapon",
+    "LAS-99 Quasar Cannon": "Support Weapon",
+    "LIFT-182 Warp Pack": "Backpack",
+    "LIFT-850 Jump Pack": "Backpack",
+    "LIFT-860 Hover Pack": "Backpack",
+    "M-1000 Maxigun": "Support Weapon",
+    "M-102 Gunner FRV": "Vehicle",
+    "M-103 Supply FRV": "Vehicle",
+    "M-104 Incinerator FRV": "Vehicle",
+    "M-105 Stalwart": "Support Weapon",
+    "MD-17 Anti-Tank Mines": "Emplacement",
+    "MD-6 Anti-Personnel Minefield": "Emplacement",
+    "MD-8 Gas Mines": "Emplacement",
+    "MD-I4 Incendiary Mines": "Emplacement",
+    "MG-206 Heavy Machine Gun": "Support Weapon",
+    "MG-43 Machine Gun": "Support Weapon",
+    "MGX-42 Bullet Storm": "Support Weapon",
+    "MLS-4X Commando": "Support Weapon",
+    "MS-11 Solo Silo": "Support Weapon",
+    "Orbital 120mm HE Barrage": "Orbital",
+    "Orbital 380mm HE Barrage": "Orbital",
+    "Orbital Airburst Strike": "Orbital",
+    "Orbital EMS Strike": "Orbital",
+    "Orbital Gas Strike": "Orbital",
+    "Orbital Gatling Barrage": "Orbital",
+    "Orbital Laser": "Orbital",
+    "Orbital Napalm Barrage": "Orbital",
+    "Orbital Precision Strike": "Orbital",
+    "Orbital Railcannon Strike": "Orbital",
+    "Orbital Smoke Strike": "Orbital",
+    "Orbital Walking Barrage": "Orbital",
+    "PLAS-45 Epoch": "Support Weapon",
+    "RL-77 Airburst Rocket Launcher": "Support Weapon",
+    "RS-422 Railgun": "Support Weapon",
+    "S-11 Speargun": "Support Weapon",
+    "SH-20 Ballistic Shield Backpack": "Backpack",
+    "SH-32 Shield Generator Pack": "Backpack",
+    "SH-51 Directional Shield": "Backpack",
+    "StA-X3 W.A.S.P. Launcher": "Support Weapon",
+    "TD-220 Bastion MK XVI": "Vehicle",
+    "TX-41 Sterilizer": "Support Weapon",
+    "Activate E-711 Extraction Drill": "Objective",
+    "Aquifer Drill": "Objective",
+    "Call In Super Destroyer": "Ship",
+    "Dark Fluid Vessel": "Objective",
+    "Eagle Rearm": "Ship",
+    "Hive Breaker Drill": "Objective",
+    "NUX-223 Hellbomb": "Objective",
+    "Orbital Illumination Flare": "Other",
+    "Portable Comms Relay": "Objective",
+    "Prospecting Drill": "Objective",
+    "Reinforce": "Ship",
+    "Resupply": "Ship",
+    "SEAF Artillery": "Objective",
+    "Seismic Probe": "Objective",
+    "SoS Beacon": "Ship",
+    "SSSD Delivery": "Objective",
+    "Super Earth Flag": "Objective",
+    "Tactical Video Camera": "Objective",
+    "Tectonic Drill": "Objective",
+    "Upload Data": "Objective"
+  }
+}

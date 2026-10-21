@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import re
 import time
@@ -38,6 +39,25 @@ def get_data_file():
     return os.path.join(get_cache_dir(), DATA_FILE_NAME)
 
 
+def _get_bundled_default_file():
+    if getattr(sys, 'frozen', False):
+        base_path = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+    else:
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    return os.path.join(base_path, "assets", "stratagems_default.json")
+
+
+def _load_bundled_defaults():
+    path = _get_bundled_default_file()
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"[WikiFetcher] Bundled defaults load error: {e}")
+    return None
+
+
 def clear_cache():
     cache_dir = get_cache_dir()
     with _cache_lock:
@@ -74,14 +94,17 @@ def _api_get(params, _retries=0):
     params["format"] = "json"
     params["maxlag"] = str(MAXLAG)
     url = WIKI_API + "?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers={"User-Agent": "HelldiversMacro/1.0"})
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Helldivers2StratCommander/0.4.3 (https://github.com/goncaloestrelado/HelldiversMacro)"}
+    )
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with urllib.request.urlopen(req, timeout=25) as r:
             raw = r.read().decode("utf-8")
     except urllib.error.HTTPError as e:
-        if e.code == 429 and _retries < len(RETRY_DELAYS):
+        if e.code in (429, 502, 503, 504) and _retries < len(RETRY_DELAYS):
             delay = RETRY_DELAYS[_retries]
-            print(f"[WikiFetcher] Rate limited (429), retrying in {delay}s...")
+            print(f"[WikiFetcher] HTTP {e.code}, retrying in {delay}s...")
             time.sleep(delay)
             return _api_get(params, _retries + 1)
         raise
@@ -97,7 +120,10 @@ def _api_get(params, _retries=0):
 def _is_excluded_title(title):
     if "(disambiguation)" in title:
         return True
-    if title.startswith("Template:") or title.startswith("April Fools"):
+    if title.startswith("Template:") or title.startswith("Community:"):
+        return True
+    lower = title.lower()
+    if "april fools" in lower or "aprilfools" in lower:
         return True
     if re.search(r"/[a-z]{2}(?:-[a-z]{2})?$", title, re.IGNORECASE):
         return True
@@ -158,6 +184,7 @@ def _fetch_all_wikitext_via_generator():
         "rvslots": "main",
     }
     page_num = 0
+    last_error = None
     while True:
         page_num += 1
         print(f"[WikiFetcher] Fetching page {page_num} of stratagems...")
@@ -165,6 +192,7 @@ def _fetch_all_wikitext_via_generator():
             data = _api_get(params)
         except Exception as e:
             print(f"[WikiFetcher] Generator fetch error: {e}")
+            last_error = e
             break
         pages = data.get("query", {}).get("pages", {})
         for page_data in pages.values():
@@ -185,6 +213,10 @@ def _fetch_all_wikitext_via_generator():
             break
         params.update(cont)
         time.sleep(REQUEST_DELAY)
+
+    if not results and last_error:
+        raise RuntimeError(f"Wiki fetch failed: {last_error}") from last_error
+
     return results
 
 
@@ -226,7 +258,10 @@ def _fetch_image_urls_for_new_icons(filenames, existing_icons_dir):
 
 
 def _download_file(url, dest_path):
-    req = urllib.request.Request(url, headers={"User-Agent": "HelldiversMacro/1.0"})
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Helldivers2StratCommander/0.4.3 (https://github.com/goncaloestrelado/HelldiversMacro)"}
+    )
     with urllib.request.urlopen(req, timeout=20) as r:
         content = r.read()
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
@@ -249,6 +284,9 @@ def fetch_and_cache(on_request_count=None):
     wikitext_map = _fetch_all_wikitext_via_generator()
     print(f"[WikiFetcher] Got wikitext for {len(wikitext_map)} pages.")
 
+    if not wikitext_map:
+        raise RuntimeError("Wiki fetch returned 0 pages. Check network connection or wiki status.")
+
     stratagems_by_department = {}
     icon_filename_map = {}
     stratagem_type_map = {}
@@ -270,6 +308,10 @@ def fetch_and_cache(on_request_count=None):
             icon_filename_map[title] = icon_fn
         if stratagem_type:
             stratagem_type_map[title] = stratagem_type
+
+    total = sum(len(v) for v in stratagems_by_department.values())
+    if total == 0:
+        raise RuntimeError("No valid stratagems parsed from wiki content. Existing cache was preserved.")
 
     icons_dir = get_icons_dir()
     os.makedirs(icons_dir, exist_ok=True)
@@ -303,11 +345,13 @@ def fetch_and_cache(on_request_count=None):
     cache_dir = get_cache_dir()
     os.makedirs(cache_dir, exist_ok=True)
 
+    data_file = get_data_file()
+    tmp_file = data_file + ".tmp"
     with _cache_lock:
-        with open(get_data_file(), "w", encoding="utf-8") as f:
+        with open(tmp_file, "w", encoding="utf-8") as f:
             json.dump(cache_data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_file, data_file)
 
-    total = sum(len(v) for v in stratagems_by_department.values())
     print(f"[WikiFetcher] Done. Cached {total} stratagems across {len(stratagems_by_department)} departments.")
     return stratagems_by_department, downloaded_icons
 
@@ -319,20 +363,30 @@ def load_cache():
 
 def load_cache_with_metadata():
     path = get_data_file()
-    if not os.path.exists(path):
-        return None, None, {}
-    try:
-        with _cache_lock:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+    if os.path.exists(path):
+        try:
+            with _cache_lock:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            strats = data.get("stratagems_by_department")
+            if isinstance(strats, dict) and len(strats) > 0:
+                return (
+                    strats,
+                    data.get("icon_filename_map", {}),
+                    data.get("stratagem_type_map", {}),
+                )
+        except Exception as e:
+            print(f"[WikiFetcher] Cache load error: {e}")
+
+    defaults = _load_bundled_defaults()
+    if defaults:
         return (
-            data.get("stratagems_by_department"),
-            data.get("icon_filename_map", {}),
-            data.get("stratagem_type_map", {}),
+            defaults.get("stratagems_by_department", {}),
+            defaults.get("icon_filename_map", {}),
+            defaults.get("stratagem_type_map", {}),
         )
-    except Exception as e:
-        print(f"[WikiFetcher] Cache load error: {e}")
-        return None, None, {}
+
+    return None, None, {}
 
 
 def is_cache_stale():
@@ -400,7 +454,7 @@ def _is_check_due():
 def has_new_content():
     if not os.path.exists(get_data_file()):
         return True
-    if not _is_check_due():
+    if not _is_check_due() and not is_cache_stale():
         print("[WikiFetcher] Check interval not reached, skipping.")
         return False
     cached_ts = _get_cached_page_timestamp()
@@ -416,33 +470,48 @@ def has_new_content():
 
 def get_cache_timestamp():
     path = get_data_file()
-    if not os.path.exists(path):
-        return None
-    try:
-        with _cache_lock:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        ts = data.get("timestamp")
-        return ts
-    except Exception:
-        return None
+    if os.path.exists(path):
+        try:
+            with _cache_lock:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            ts = data.get("timestamp")
+            if ts:
+                return ts
+        except Exception:
+            pass
+    defaults = _load_bundled_defaults()
+    if defaults:
+        return defaults.get("timestamp")
+    return None
+
+
+def get_wiki_icon_filename(name):
+    """Get the icon filename mapped to this stratagem name, from cache or defaults."""
+    path = get_data_file()
+    if os.path.exists(path):
+        try:
+            with _cache_lock:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            fn = data.get("icon_filename_map", {}).get(name)
+            if fn:
+                return fn
+        except Exception:
+            pass
+    defaults = _load_bundled_defaults()
+    if defaults:
+        return defaults.get("icon_filename_map", {}).get(name)
+    return None
 
 
 def get_wiki_icon_path(name):
-    path = get_data_file()
-    if not os.path.exists(path):
-        return None
-    try:
-        with _cache_lock:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        icon_filename_map = data.get("icon_filename_map", {})
-        fn = icon_filename_map.get(name)
-        if fn:
-            return os.path.join(get_icons_dir(), fn)
-        return None
-    except Exception:
-        return None
+    fn = get_wiki_icon_filename(name)
+    if fn:
+        p = os.path.join(get_icons_dir(), fn)
+        if os.path.exists(p):
+            return p
+    return None
 
 
 def refresh_in_background(on_complete=None, on_error=None, on_request_count=None):

@@ -112,28 +112,95 @@ def run_as_admin():
         return False
 
 
+_LOCAL_ASSETS_MAP = {}
+_LOCAL_ASSETS_INDEXED = False
+
+
+def _get_base_path():
+    if getattr(sys, 'frozen', False):
+        return getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+
+def _index_local_assets():
+    global _LOCAL_ASSETS_MAP, _LOCAL_ASSETS_INDEXED
+    if _LOCAL_ASSETS_INDEXED:
+        return
+
+    base_path = _get_base_path()
+    assets_lookup = os.path.join(base_path, ASSETS_DIR)
+    if os.path.exists(assets_lookup):
+        for root, _, files in os.walk(assets_lookup):
+            for f in files:
+                if f.lower().endswith(".svg"):
+                    full_p = os.path.join(root, f)
+                    _LOCAL_ASSETS_MAP[f.lower()] = full_p
+                    stem = os.path.splitext(f)[0]
+                    _LOCAL_ASSETS_MAP[normalize(stem)] = full_p
+
+    _LOCAL_ASSETS_INDEXED = True
+
+
 def find_svg_path(name):
+    """Find SVG path for a stratagem across plugin overrides, wiki cache, and bundled assets."""
+    if not name:
+        return None
+
+    # 1. Plugin override
     override_path = _ICON_OVERRIDE_PATHS.get(name)
     if override_path and os.path.exists(override_path):
         return override_path
 
-    # TEST: skip local assets, use only wiki cache
+    # 2. Wiki cache
+    wiki_fn = None
     try:
-        from ..managers.wiki_fetcher import get_wiki_icon_path
+        from ..managers.wiki_fetcher import get_wiki_icon_path, get_wiki_icon_filename
         wiki_path = get_wiki_icon_path(name)
         if wiki_path and os.path.exists(wiki_path):
             return wiki_path
+        wiki_fn = get_wiki_icon_filename(name)
     except Exception:
         pass
 
-    # base_path = getattr(sys, '_MEIPASS', os.path.abspath("."))
-    # assets_lookup = os.path.join(base_path, ASSETS_DIR)
-    # target = normalize(name)
-    # for root, dirs, files in os.walk(assets_lookup):
-    #     for f in files:
-    #         if f.endswith(".svg"):
-    #             if normalize(os.path.splitext(f)[0]) == target:
-    #                 return os.path.join(root, f)
+    # 3. Bundled local assets
+    _index_local_assets()
+
+    # 3a. Wiki icon filename match in local assets (e.g. assets/wiki_icons/)
+    if wiki_fn and wiki_fn.lower() in _LOCAL_ASSETS_MAP:
+        p = _LOCAL_ASSETS_MAP[wiki_fn.lower()]
+        if os.path.exists(p):
+            return p
+
+    # 3b. Direct normalized match (e.g. "Dark Fluid Vessel" -> "Dark Fluid Vessel.svg")
+    norm_name = normalize(name)
+    if norm_name in _LOCAL_ASSETS_MAP:
+        p = _LOCAL_ASSETS_MAP[norm_name]
+        if os.path.exists(p):
+            return p
+
+    # 3c. Strip military/code prefix (e.g. "AX/LAS-5 Rover" -> "Rover", "NUX-223 Hellbomb" -> "Hellbomb")
+    cleaned_prefix = re.sub(r'^[A-Z0-9\/\-]+\s+', '', name)
+    norm_prefix = normalize(cleaned_prefix)
+    if norm_prefix in _LOCAL_ASSETS_MAP:
+        p = _LOCAL_ASSETS_MAP[norm_prefix]
+        if os.path.exists(p):
+            return p
+
+    # 3d. Strip version suffix (e.g. "TD-220 Bastion MK XVI" -> "TD-220 Bastion")
+    cleaned_suffix = re.sub(r'\s+MK\s+[IVXLCDM]+$', '', name, flags=re.IGNORECASE)
+    norm_suffix = normalize(cleaned_suffix)
+    if norm_suffix in _LOCAL_ASSETS_MAP:
+        p = _LOCAL_ASSETS_MAP[norm_suffix]
+        if os.path.exists(p):
+            return p
+
+    # 3e. Both stripped (e.g. "TD-220 Bastion MK XVI" -> "Bastion")
+    both_cleaned = re.sub(r'^[A-Z0-9\/\-]+\s+', '', cleaned_suffix)
+    norm_both = normalize(both_cleaned)
+    if norm_both in _LOCAL_ASSETS_MAP:
+        p = _LOCAL_ASSETS_MAP[norm_both]
+        if os.path.exists(p):
+            return p
 
     return None
 
@@ -154,7 +221,7 @@ def set_icon_overrides(overrides):
 
 def get_asset_path(filename):
     """Get the correct path for an asset file, handling both development and PyInstaller builds"""
-    base_path = getattr(sys, '_MEIPASS', os.path.abspath("."))
+    base_path = _get_base_path()
     return os.path.join(base_path, ASSETS_DIR, filename)
 
 
