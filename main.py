@@ -517,6 +517,7 @@ class StratagemApp(QMainWindow):
         self.wiki_fetch_finished.connect(self._on_wiki_fetch_finished)
         self.wiki_fetch_request_count.connect(self._on_wiki_fetch_request_count)
         self.refresh_profiles()
+        comm.status_message.connect(self.show_status)
         
         self.tray_manager = TrayManager(
             self.app_icon if hasattr(self, 'app_icon') and self.app_icon else None
@@ -3612,7 +3613,7 @@ class StratagemApp(QMainWindow):
             stratagem_name = slot.assigned_stratagem
             seq = self.stratagems.get(stratagem_name)
             if seq:
-                slot.run_macro(stratagem_name, seq, slot.label_text)
+                self.macro_engine.execute_macro(slot, stratagem_name, seq)
     
     def _show_window(self):
         """Show and activate the main window"""
@@ -3628,6 +3629,47 @@ class StratagemApp(QMainWindow):
     def check_for_updates_startup(self):
         """Check for updates on startup"""
         check_for_updates_startup(self, self.global_settings)
+
+
+def ensure_single_instance():
+    """
+    Ensure only one instance of the application runs at a time using a named Windows Mutex.
+    If another instance is already running, activate its window and exit cleanly.
+    """
+    from ctypes import wintypes
+
+    MUTEX_NAME = "Local\\Helldivers2StratCommander_SingleInstance_Mutex"
+    ERROR_ALREADY_EXISTS = 183
+
+    mutex = ctypes.windll.kernel32.CreateMutexW(None, True, MUTEX_NAME)
+    if ctypes.windll.kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
+        user32 = ctypes.windll.user32
+        target_hwnd = None
+
+        def enum_cb(hwnd, extra):
+            nonlocal target_hwnd
+            if user32.IsWindowVisible(hwnd):
+                length = user32.GetWindowTextLengthW(hwnd)
+                if length > 0:
+                    buff = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buff, length + 1)
+                    if APP_NAME in buff.value:
+                        target_hwnd = hwnd
+                        return False
+            return True
+
+        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+        user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
+
+        if target_hwnd:
+            user32.ShowWindow(target_hwnd, 9)  # SW_RESTORE
+            user32.SetForegroundWindow(target_hwnd)
+
+        if mutex:
+            ctypes.windll.kernel32.CloseHandle(mutex)
+        sys.exit(0)
+
+    return mutex
 
 
 def main():
@@ -3654,11 +3696,17 @@ def main():
                     "Error",
                     0x00000000 | 0x00000010,
                 )
+
+    single_instance_mutex = ensure_single_instance()
     
     app = QApplication(sys.argv)
     ex = StratagemApp()
     ex.show()
-    sys.exit(app.exec())
+    try:
+        sys.exit(app.exec())
+    finally:
+        if single_instance_mutex:
+            ctypes.windll.kernel32.CloseHandle(single_instance_mutex)
 
 
 if __name__ == '__main__':

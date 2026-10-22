@@ -16,6 +16,7 @@ from ..config.config import find_svg_path
 
 class Comm(QObject):
     update_test_display = pyqtSignal(str, list, str)
+    status_message = pyqtSignal(str, int)
 
 
 comm = Comm()
@@ -311,24 +312,36 @@ class NumpadSlot(QWidget):
         """Execute the macro for this slot"""
         if self.is_hidden:
             return
-        comm.update_test_display.emit(name, sequence, key_label)
-        delay = self.parent_app.speed_slider.value() / 1000.0
         
-        for move in sequence:
-            actual_key = self.parent_app.map_direction_to_key(move)
-            keyboard.press(actual_key)
-            time.sleep(delay)
-            keyboard.release(actual_key)
-            time.sleep(delay)
-        
-        if self.parent_app.global_settings.get("sound_enabled", True):
-            try:
-                winsound.Beep(1000, 200)
-            except:
-                pass
-        
-        if self.parent_app.global_settings.get("visual_enabled", True):
-            self.parent_app.show_status(f"✓ {name} executed", 1500)
+        engine = getattr(self.parent_app, 'macro_engine', None)
+        owns_guard = False
+        if engine and not getattr(engine, 'is_executing', False):
+            engine.is_executing = True
+            owns_guard = True
+
+        try:
+            comm.update_test_display.emit(name, sequence, key_label)
+            delay = self.parent_app.speed_slider.value() / 1000.0
+            
+            for move in sequence:
+                actual_key = self.parent_app.map_direction_to_key(move)
+                keyboard.press(actual_key)
+                time.sleep(delay)
+                keyboard.release(actual_key)
+                time.sleep(delay)
+            
+            if self.parent_app.global_settings.get("sound_enabled", True):
+                try:
+                    winsound.Beep(1000, 200)
+                except:
+                    pass
+            
+            if self.parent_app.global_settings.get("visual_enabled", True):
+                comm.status_message.emit(f"✓ {name} executed", 1500)
+        finally:
+            if owns_guard and engine:
+                time.sleep(0.05)
+                engine.is_executing = False
 
 
 class CollapsibleDepartmentHeader(QWidget):

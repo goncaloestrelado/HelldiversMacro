@@ -5,6 +5,7 @@ Handles keyboard hooking and macro execution
 
 import time
 import winsound
+import threading
 import keyboard
 from ..config.constants import KEYBIND_MAPPINGS
 
@@ -31,6 +32,8 @@ class MacroEngine:
         self.get_stratagems = get_stratagems_callback
         self.map_direction = map_direction_callback
         self.hooks_active = False
+        self.is_executing = False
+        self._execution_lock = threading.Lock()
     
     def enable(self):
         """Enable keyboard hooks for macro execution"""
@@ -38,11 +41,13 @@ class MacroEngine:
             keyboard.unhook_all()
         except:
             pass
+        self.is_executing = False
         keyboard.hook(self._keyboard_event_handler)
         self.hooks_active = True
     
     def disable(self):
         """Disable keyboard hooks"""
+        self.is_executing = False
         try:
             keyboard.unhook_all()
         except:
@@ -53,6 +58,27 @@ class MacroEngine:
         """Check if macro hooks are active"""
         return self.hooks_active
     
+    def execute_macro(self, slot, stratagem_name, seq):
+        """
+        Execute a macro with re-entrancy protection and thread safety.
+        Runs the sequence in a dedicated background worker so the keyboard
+        hook callback returns immediately to Windows without timing out.
+        """
+        with self._execution_lock:
+            if self.is_executing:
+                return
+            self.is_executing = True
+
+        def _worker():
+            try:
+                slot.run_macro(stratagem_name, seq, slot.label_text)
+                # Small cooldown to allow Windows input queue to drain synthetic events
+                time.sleep(0.05)
+            finally:
+                self.is_executing = False
+
+        threading.Thread(target=_worker, daemon=True).start()
+
     def _keyboard_event_handler(self, event):
         """
         Handle keyboard events for macro execution
@@ -63,6 +89,11 @@ class MacroEngine:
         Returns:
             False to suppress the key, True to allow it
         """
+        # Immediately ignore all events if a macro is currently executing
+        # This prevents synthetic arrow keys from re-triggering numpad bindings
+        if self.is_executing:
+            return True
+
         if event.event_type == keyboard.KEY_DOWN:
             slots = self.get_slots()
             scan_code_str = str(event.scan_code)
@@ -78,7 +109,7 @@ class MacroEngine:
                     stratagem_name = slot.assigned_stratagem
                     seq = self.get_stratagems().get(stratagem_name)
                     if seq:
-                        slot.run_macro(stratagem_name, seq, slot.label_text)
+                        self.execute_macro(slot, stratagem_name, seq)
                     return False  # Suppress the key
         
         return True  # Allow the key through
